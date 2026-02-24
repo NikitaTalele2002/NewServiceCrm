@@ -1,0 +1,19 @@
+-- Add CN (Credit Note) Date and Value columns to SpareRequests table
+
+IF NOT EXISTS (
+  SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS 
+  WHERE TABLE_NAME = 'SpareRequests' AND COLUMN_NAME = 'CnDate'
+)
+BEGIN
+  ALTER TABLE SpareRequests
+  ADD CnDate DATETIME NULL;
+END
+
+IF NOT EXISTS (
+  SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS 
+  WHERE TABLE_NAME = 'SpareRequests' AND COLUMN_NAME = 'CnValue'
+)
+BEGIN
+  ALTER TABLE SpareRequests
+  ADD CnValue DECIMAL(10, 2) NULL;
+END

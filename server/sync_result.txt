@@ -1,0 +1,369 @@
+﻿[dotenv@17.2.3] injecting env (6) from .env -- tip: Γ£à audit secrets and track compliance: https://dotenvx.com/ops
+Loading Customer model...
+Customer model loaded
+Loading ProductMaster model...
+ProductMaster model loaded
+Aliased Product -> ProductMaster
+Loading Users model...
+Users model loaded
+Loading State model...
+State model loaded
+Loading City model...
+City model loaded
+Loading Pincode model...
+Pincode model loaded
+Loading ProductGroup model...
+ProductGroup model loaded
+Loading ProductModel model...
+ProductModel model loaded
+Loading SparePart model...
+SparePart model loaded
+Loading SpareRequest model...
+SpareRequest model loaded
+Loading SpareRequestItem model...
+SpareRequestItem model loaded
+Loading Roles model...
+Roles model loaded
+Loading AccessControl model...
+AccessControl model loaded
+Loading Dealers model...
+Dealers model loaded
+Loading ReportingAuthority model...
+ReportingAuthority model loaded
+Loading Zones model...
+Zones model loaded
+Loading Plant model...
+Plant model loaded
+Loading RSM model...
+RSM model loaded
+Loading CustomersProducts model...
+CustomersProducts model loaded
+Loading Status model...
+Status model loaded
+Loading SubStatus model...
+SubStatus model loaded
+Loading Calls model...
+Calls model loaded
+Loading CallSpareUsage model...
+CallSpareUsage model loaded
+Loading Attachments model...
+Attachments model loaded
+Loading AttachmentAccess model...
+AttachmentAccess model loaded
+Loading HappyCodes model...
+HappyCodes model loaded
+Loading TATTracking model...
+TATTracking model loaded
+Loading TATHolds model...
+TATHolds model loaded
+Loading ActionLog model...
+ActionLog model loaded
+Loading Approvals model...
+Approvals model loaded
+Loading SpareInventory model...
+SpareInventory model loaded
+Γ£à Associated SpareInventory -> SparePart (with alias)
+Loading StockMovement model...
+StockMovement model loaded
+Loading Cartons model...
+Cartons model loaded
+Loading GoodsMovementItems model...
+GoodsMovementItems model loaded
+Loading ServiceCenter model...
+ServiceCenter model loaded
+Loading Technicians model...
+Technicians model loaded
+Loading CallTechnicianAssignment model...
+CallTechnicianAssignment model loaded
+Loading CallCancellationRequests model...
+CallCancellationRequests model loaded
+Loading LogisticsDocuments model...
+LogisticsDocuments model loaded
+Loading LogisticsDocumentItems model...
+LogisticsDocumentItems model loaded
+Loading ServiceInvoice model...
+ServiceInvoice model loaded
+Loading ServiceInvoiceItem model...
+ServiceInvoiceItem model loaded
+Loading DefectMaster model...
+DefectMaster model loaded
+Loading DefectSpares model...
+DefectSpares model loaded
+Loading ModelDefects model...
+ModelDefects model loaded
+Loading EntityChangeRequests model...
+EntityChangeRequests model loaded
+Loading Ledger model...
+Ledger model loaded
+Loading Replacements model...
+Replacements model loaded
+Loading Reimbursement model...
+Reimbursement model loaded
+Loading RSMStateMapping model...
+RSMStateMapping model loaded
+Loading SAPDocuments model...
+SAPDocuments model loaded
+Loading SAPDocumentItems model...
+SAPDocumentItems model loaded
+Loading ServiceCenterFinancial model...
+ServiceCenterFinancial model loaded
+Loading ServiceCenterPincodes model...
+ServiceCenterPincodes model loaded
+Γ£à Associations defined: CustomersProducts <-> ProductMaster/ProductModel/Customer; Calls <-> Customer/ServiceCenter/Status/CustomersProducts/Technicians; ServiceCenterPincodes <-> ServiceCenter; Technicians <-> ServiceCenter; ProductGroup <-> ProductMaster <-> ProductModel <-> SparePart; SpareRequest <-> SpareRequestItem; SpareRequestItem <-> SparePart; LogisticsDocuments <-> LogisticsDocumentItems; StockMovement <-> GoodsMovementItems/Cartons; Cartons <-> GoodsMovementItems; GoodsMovementItems <-> SparePart
+Γ£à All critical models loaded successfully
+
+
+ΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉ
+  PRODUCTION DATABASE SYNC WITH CIRCULAR FK MIGRATION
+ΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉ
+
+
+MSSQL pool connected
+Γ£à Connected to NewCRM database
+
+ΓòÉΓòÉΓòÉ CHECKING TABLE COLUMNS AGAINST MODELS ΓòÉΓòÉΓòÉ
+
+Γ£à AccessControl ([access_controls]): All columns present
+Γ£à ActionLog ([action_logs]): All columns present
+Γ£à Approvals ([approvals]): All columns present
+Γ£à AttachmentAccess ([attachment_access]): All columns present
+Γ£à Attachments ([attachments]): All columns present
+Γ£à CallCancellationRequests ([call_cancellation_requests]): All columns present
+Γ£à CallSpareUsage ([call_spare_usage]): All columns present
+Γ£à CallTechnicianAssignment ([call_technician_assignment]): All columns present
+Γ£à Cartons ([cartons]): All columns present
+Γ£à City ([Cities]): All columns present
+Γ£à Customer ([customers]): All columns present
+Γ£à CustomersProducts ([customers_products]): All columns present
+Γ£à Dealers ([dealers]): All columns present
+Γ£à DefectMaster ([defect_master]): All columns present
+Γ£à DefectSpares ([defect_spares]): All columns present
+Γ£à EntityChangeRequests ([entity_change_requests]): All columns present
+Γ£à GoodsMovementItems ([goods_movement_items]): All columns present
+Γ£à HappyCodes ([happy_codes]): All columns present
+Γ£à Ledger ([ledger]): All columns present
+Γ£à LogisticsDocumentItems ([logistics_document_items]): All columns present
+Γ£à LogisticsDocuments ([logistics_documents]): All columns present
+Γ£à ModelDefects ([model_defects]): All columns present
+Γ£à Pincode ([Pincodes]): All columns present
+Γ£à Plant ([plants]): All columns present
+Γ£à ProductGroup ([ProductGroups]): All columns present
+Γ£à ProductMaster ([ProductMaster]): All columns present
+Γ£à ProductModel ([ProductModels]): All columns present
+Γ£à Reimbursement ([reimbursement]): All columns present
+Γ£à Replacements ([replacements]): All columns present
+Γ£à ReportingAuthority ([reporting_authority]): All columns present
+Γ£à Roles ([roles]): All columns present
+Γ£à RSMStateMapping ([rsm_state_mapping]): All columns present
+Γ£à RSM ([rsms]): All columns present
+Γ£à SAPDocumentItems ([sap_document_items]): All columns present
+Γ£à SAPDocuments ([sap_documents]): All columns present
+Γ£à ServiceCenterFinancial ([service_center_financial]): All columns present
+Γ£à ServiceCenterPincodes ([service_center_pincodes]): All columns present
+Γ£à ServiceCenter ([service_centers]): All columns present
+Γ£à ServiceInvoiceItem ([service_invoice_items]): All columns present
+Γ£à ServiceInvoice ([service_invoices]): All columns present
+Γ£à SpareInventory ([spare_inventory]): All columns present
+Γ£à SparePart ([spare_parts]): All columns present
+Γ£à State ([States]): All columns present
+Γ£à Status ([status]): All columns present
+Γ£à StockMovement ([stock_movement]): All columns present
+Γ£à SubStatus ([sub_status]): All columns present
+Γ£à TATHolds ([tat_holds]): All columns present
+Γ£à TATTracking ([tat_tracking]): All columns present
+Γ£à Technicians ([technicians]): All columns present
+Γ£à Users ([users]): All columns present
+Γ£à Zones ([zones]): All columns present
+
+Γ£à Column check complete: 51 tables checked, 0 columns added
+
+≡ƒôî Disabling foreign key checks...
+Γ£à FK checks disabled
+
+Found 51 existing tables
+
+Γ£à Dropped 31 tables
+
+≡ƒôî Re-enabling foreign key checks...
+Γ£à FK checks enabled
+
+ΓòÉΓòÉΓòÉ SYNCING ALL 54 MODELS IN DEPENDENCY ORDER ΓòÉΓòÉΓòÉ
+
+Γ£à Roles
+Γ£à Zones
+Γ£à Status
+Γ£à SubStatus
+Γ£à State
+Γ£à City
+Γ£à Pincode
+Γ£à ProductGroup
+Γ£à ProductMaster
+Γ£à ProductModel
+Γ£à Users
+Γ£à RSM
+Γ£à Dealers
+Γ£à ReportingAuthority
+Γ£à Plant
+Γ£à ServiceCenter
+Γ£à AccessControl
+Γ£à SparePart
+Γ£à Customer
+Γ£à CustomersProducts
+Γ£à Attachments
+Γ£à AttachmentAccess
+Γ£à ServiceCenterPincodes
+Γ£à ServiceCenterFinancial
+Γ¥î Calls - 
+Γ£à HappyCodes
+Γ£à TATTracking
+Γ£à TATHolds
+Γ£à Technicians
+Γ£à CallSpareUsage
+Γ£à CallTechnicianAssignment
+Γ£à CallCancellationRequests
+Γ¥î SpareRequest - 
+Γ¥î SpareRequestItem - 
+Γ£à StockMovement
+Γ£à Cartons
+Γ£à SpareInventory
+Γ£à GoodsMovementItems
+Γ£à LogisticsDocuments
+Γ£à LogisticsDocumentItems
+Γ£à Approvals
+Γ£à ActionLog
+Γ£à ServiceInvoice
+Γ£à ServiceInvoiceItem
+Γ£à DefectMaster
+Γ£à DefectSpares
+Γ£à ModelDefects
+Γ£à EntityChangeRequests
+Γ£à Ledger
+Γ£à Replacements
+Γ£à Reimbursement
+Γ£à RSMStateMapping
+Γ£à SAPDocuments
+Γ£à SAPDocumentItems
+
+Γ£à Synced: 51
+Γ¥î Failed: 3
+
+
+ΓòÉΓòÉΓòÉ ADDING CIRCULAR DEPENDENCY FOREIGN KEYS ΓòÉΓòÉΓòÉ
+
+Γ£à Cartons -> StockMovement
+ΓÜá∩╕Å  GoodsMovementItems -> Cartons - 
+ΓÜá∩╕Å  GoodsMovementItems -> StockMovement - 
+Γ£à ServiceInvoice -> Customer
+ΓÜá∩╕Å  Calls -> Calls (self-reference) - Cannot find the object "calls" because it does not exist or 
+Γ£à Ledger -> Ledger (self-reference)
+Γ£à CallTechnicianAssignment -> Technicians
+Γ£à Replacements -> Technicians
+Γ£à ActionLog -> Status
+Γ£à ActionLog -> SubStatus
+ΓÜá∩╕Å  RSMStateMapping -> State - 
+ΓÜá∩╕Å  SpareRequestItem -> SparePart - Cannot find the object "spare_request_items" because it does
+Γ£à Customers -> Cities
+Γ£à Customers -> States
+ΓÜá∩╕Å  Customers -> Pincodes - 
+Γ£à Customers -> Users (created_by)
+Γ£à CustomersProducts -> Customers
+Γ£à Technicians -> Users
+ΓÜá∩╕Å  Technicians -> ServiceCenters - 
+ΓÜá∩╕Å  Calls -> Customers - Cannot find the object "calls" because it does not exist or 
+ΓÜá∩╕Å  Calls -> CustomersProducts - Cannot find the object "calls" because it does not exist or 
+ΓÜá∩╕Å  Calls -> Users (assigned_tech) - Cannot find the object "calls" because it does not exist or 
+ΓÜá∩╕Å  Calls -> Status - Cannot find the object "calls" because it does not exist or 
+ΓÜá∩╕Å  Calls -> SubStatus - Cannot find the object "calls" because it does not exist or 
+ΓÜá∩╕Å  ServiceInvoice -> Calls - 
+Γ£à ServiceInvoice -> ServiceCenters
+ΓÜá∩╕Å  ServiceInvoice -> Users (created_by) - 
+ΓÜá∩╕Å  ServiceInvoiceItem -> ServiceInvoice - 
+ΓÜá∩╕Å  TATTracking -> Calls - 
+ΓÜá∩╕Å  TATHolds -> Calls - 
+ΓÜá∩╕Å  CallSpareUsage -> Calls - 
+Γ£à CallSpareUsage -> SpareParts
+ΓÜá∩╕Å  CallCancellationRequests -> Calls - 
+ΓÜá∩╕Å  CallCancellationRequests -> Users (requested_by) - 
+ΓÜá∩╕Å  SpareRequest -> ServiceCenters - Cannot find the object "spare_requests" because it does not 
+ΓÜá∩╕Å  SpareRequest -> Users (approved_by) - Cannot find the object "spare_requests" because it does not 
+ΓÜá∩╕Å  SpareRequestItem -> SpareRequest - Cannot find the object "spare_request_items" because it does
+Γ£à Ledger -> ServiceCenters
+Γ£à Ledger -> Users (reversed_by)
+Γ£à Ledger -> Users (created_by)
+Γ£à Replacements -> CustomersProducts
+ΓÜá∩╕Å  GoodsMovementItems -> SpareParts - 
+ΓÜá∩╕Å  GoodsMovementItems -> StockMovement - 
+Γ£à ActionLog -> Roles
+Γ£à ActionLog -> Users
+ΓÜá∩╕Å  ServiceCenterFinancial -> ServiceCenters - 
+ΓÜá∩╕Å  ServiceCenterFinancial -> Users (last_updated_by) - 
+ΓÜá∩╕Å  RSMStateMapping -> Roles - 
+Γ£à RSMStateMapping -> RSMs
+Γ£à RSMStateMapping -> States
+
+Γ£à Added 22 FKs via ALTER
+
+ΓòÉΓòÉΓòÉ DATABASE VERIFICATION ΓòÉΓòÉΓòÉ
+
+≡ƒôè Total tables: 51/54
+
+ΓÜá∩╕Å  Not all tables created. Count: 51
+
+Tables found:
+   1. access_controls
+   2. action_logs
+   3. approvals
+   4. attachment_access
+   5. attachments
+   6. call_cancellation_requests
+   7. call_spare_usage
+   8. call_technician_assignment
+   9. cartons
+  10. Cities
+  11. customers
+  12. customers_products
+  13. dealers
+  14. defect_master
+  15. defect_spares
+  16. entity_change_requests
+  17. goods_movement_items
+  18. happy_codes
+  19. ledger
+  20. logistics_document_items
+  21. logistics_documents
+  22. model_defects
+  23. Pincodes
+  24. plants
+  25. ProductGroups
+  26. ProductMaster
+  27. ProductModels
+  28. reimbursement
+  29. replacements
+  30. reporting_authority
+  31. roles
+  32. rsm_state_mapping
+  33. rsms
+  34. sap_document_items
+  35. sap_documents
+  36. service_center_financial
+  37. service_center_pincodes
+  38. service_centers
+  39. service_invoice_items
+  40. service_invoices
+  41. spare_inventory
+  42. spare_parts
+  43. States
+  44. status
+  45. stock_movement
+  46. sub_status
+  47. tat_holds
+  48. tat_tracking
+  49. technicians
+  50. users
+  51. zones
+ΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉ
+  ΓÜá∩╕Å  SYNC COMPLETED WITH SOME ISSUES
+ΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉ
+
+Γ¥î Not all tables were created successfully.
+

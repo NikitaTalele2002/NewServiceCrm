@@ -1,0 +1,123 @@
+
+╔══════════════════════════════════════════════════════════════════════════════╗
+║                 QUICK REFERENCE: USER 15 RSM ISSUE FIX                       ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+
+THE PROBLEM:
+─────────────────────────────────────────────────────────────────────────────
+User 15 API calls returned empty data:
+  [DEBUG] rsmUserId from req.user.id: 15
+  [DEBUG] RSM assigned stateIds: []  ← EMPTY!
+
+WHY?
+───────────────────────────────────────────────────────────────────────────────
+API was querying: WHERE rsm_user_id = 15  (user_id from users table)
+But should query: WHERE rsm_user_id = 2    (rsm_id from rsms table)
+
+The column name rsm_user_id is misleading - it's actually the RSM ID, not user ID!
+
+MAPPING:
+  user_id 15 (users table)
+       ↓
+  rsm_id 2 (rsms table, where user_id = 15)
+       ↓
+  rsm_user_id 2 (rsm_state_mapping table)  ← This column expects rsm_id!
+       ↓
+  state_id 21
+
+
+THE FIX (3 STEPS):
+─────────────────────────────────────────────────────────────────────────────
+
+1. UPDATE ENDPOINT LOGIC
+   File: server/routes/branch_inventory_current.js
+   
+   For RSM users, look up their RSM ID first:
+   
+   let rsmId = req.user.rsmId;  // Try token first
+   if (!rsmId) {
+     // Otherwise query database
+     const rsm = await sequelize.query(
+       'SELECT rsm_id FROM rsms WHERE user_id = ?',
+       { replacements: [req.user.id] }
+     );
+     rsmId = rsm[0]?.rsm_id;
+   }
+   // Now use correct rsmId for state mapping query
+
+2. ENHANCE JWT TOKENS
+   File: server/services/authService.js
+   
+   When generating tokens for RSM users:
+   payload.rsmId = rsm_id  // Include RSM ID from rsms table
+   
+   This avoids database lookup on every API call
+
+3. VERIFY & TEST
+   $ node server/setup_rsm_user15.js    # Setup user 15
+   $ node server/test_user15_endpoint.js # Test endpoints
+
+
+VERIFICATION CHECKLIST:
+─────────────────────────────────────────────────────────────────────────────
+
+✅ User 15 exists in users table (user_id = 15)
+✅ User 15 has RSM record in rsms table (rsm_id = 2)
+✅ RSM 2 has state mapping in rsm_state_mapping (rsm_user_id = 2, state_id = 21)
+✅ State 21 has plants (plant_id = 1)
+✅ API queries use rsm_id, not user_id
+✅ JWT tokens include rsmId field
+✅ TEST: /api/branch/assigned-plants returns plants
+✅ TEST: /api/branch/current-inventory returns inventory
+
+
+BEFORE & AFTER RESULTS:
+─────────────────────────────────────────────────────────────────────────────
+
+BEFORE:
+  GET /api/branch/assigned-plants
+  Response: { ok: true, plants: [] }  ❌
+
+AFTER:
+  GET /api/branch/assigned-plants
+  Response: {
+    ok: true,
+    plants: [
+      {
+        plant_id: 1,
+        plant_name: "FIN_GUWAHATI",
+        state_id: 21,
+        service_centers: [...]
+      }
+    ]
+  }  ✅
+
+
+KEY FILES:
+─────────────────────────────────────────────────────────────────────────────
+server/routes/branch_inventory_current.js    (FIXED)
+server/services/authService.js               (ENHANCED)
+server/setup_rsm_user15.js                   (NEW - Setup script)
+server/test_user15_endpoint.js               (NEW - Test script)
+server/USER15_RSM_COMPLETE_SOLUTION.md       (NEW - Detailed docs)
+
+
+TEST COMMANDS:
+─────────────────────────────────────────────────────────────────────────────
+# Setup user 15 with all required mappings
+node server/setup_rsm_user15.js
+
+# Test endpoints
+node server/test_user15_endpoint.js
+
+# Expected output: ✅ Plants endpoint working! ✅ Inventory endpoint working!
+
+
+SUMMARY:
+─────────────────────────────────────────────────────────────────────────────
+✓ Issue: User 15 got empty data
+✓ Root Cause: Query used user_id instead of rsm_id
+✓ Solution: Look up rsm_id from rsms table first
+✓ Result: User 15 now gets correct data
+✓ Status: ✅ FIXED & VERIFIED
+
