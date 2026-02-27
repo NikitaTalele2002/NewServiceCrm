@@ -55,10 +55,13 @@ export default function AssignComplaintTable({
                     {row.TechnicianName || row.AssignedTechnicianName || assignedTech?.name || (assignedTechId ? `Tech #${assignedTechId}` : '-')}
                   </td>
                   <td className="p-2 border">
-                    {reallocatedMap[row.ComplaintId]
-                      ? <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded text-sm font-medium">Reallocated</span>
-                      : (assignedTechId ? <span className="px-2 py-1 bg-green-100 text-green-800 rounded text-sm font-medium">Allocated</span> : <span className="px-2 py-1 bg-yellow-100 text-yellow-800 rounded text-sm font-medium">Unallocated</span>)
-                    }
+                    {reallocatedMap[row.ComplaintId] ? (
+                      <span className="px-2 py-1 bg-orange-100 text-orange-800 rounded text-sm font-medium">🔄 Re-Allocated</span>
+                    ) : assignedTechId ? (
+                      <span className="px-2 py-1 bg-green-100 text-green-800 rounded text-sm font-medium">✓ Allocated</span>
+                    ) : (
+                      <span className="px-2 py-1 bg-yellow-100 text-yellow-800 rounded text-sm font-medium">⊘ Unallocated</span>
+                    )}
                   </td>
                   <td className="p-2 border">
                     <div className="flex items-center gap-2">

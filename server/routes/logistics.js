@@ -1,7 +1,7 @@
 import express from 'express';
 import { sequelize } from '../db.js';
 import { authenticateToken, requireRole } from '../middleware/auth.js';
-import { generateMockSAPData, formatSAPDataForDB } from '../services/sapIntegration.js';
+import { generateMockSAPData, formatSAPDataForDB, getInvoiceByRequestId } from '../services/sapIntegration.js';
 import * as StockMovementService from '../services/StockMovementService.js';
 
 const router = express.Router();
@@ -20,35 +20,60 @@ router.post('/sync-sap', authenticateToken, requireRole(['rsm', 'admin', 'servic
     }
 
     // Fetch the spare request with items and spare part details
-    const spareRequest = await sequelize.models.SpareRequest.findByPk(requestId, {
-      include: [
-        {
-          model: sequelize.models.SpareRequestItem,
-          as: 'SpareRequestItems',
-          include: [
-            {
-              model: sequelize.models.SparePart,
-              as: 'SparePart'
-            }
-          ]
-        }
-      ]
-    });
+    let spareRequest;
+    try {
+      spareRequest = await sequelize.models.SpareRequest.findByPk(requestId, {
+        include: [
+          {
+            model: sequelize.models.SpareRequestItem,
+            as: 'SpareRequestItems',
+            include: [
+              {
+                model: sequelize.models.SparePart,
+                as: 'SparePart'
+              }
+            ]
+          }
+        ]
+      });
+    } catch (err) {
+      console.error(`❌ Error fetching spare request ${requestId}:`, err.message);
+      return res.status(500).json({ ok: false, error: 'Failed to fetch spare request details' });
+    }
 
     if (!spareRequest) {
       return res.status(404).json({ ok: false, error: 'Spare request not found' });
     }
 
+    // Check if request has items
+    if (!spareRequest.SpareRequestItems || spareRequest.SpareRequestItems.length === 0) {
+      return res.status(400).json({ ok: false, error: 'Spare request has no items to sync' });
+    }
+
     // Step 1: Get the plant assigned to the requesting ASC
     // The ASC that requested the spares is stored in requested_source_id
     console.log(`📝 Fetching plant assignment for ASC ${spareRequest.requested_source_id}...`);
-    const serviceCenter = await sequelize.models.ServiceCenter.findByPk(spareRequest.requested_source_id);
+    
+    if (!spareRequest.requested_source_id) {
+      return res.status(400).json({
+        ok: false,
+        error: 'Spare request does not have a source service center'
+      });
+    }
+
+    let serviceCenter;
+    try {
+      serviceCenter = await sequelize.models.ServiceCenter.findByPk(spareRequest.requested_source_id);
+    } catch (err) {
+      console.error(`❌ Error fetching service center ${spareRequest.requested_source_id}:`, err.message);
+      return res.status(500).json({ ok: false, error: 'Failed to fetch service center details' });
+    }
     
     if (!serviceCenter) {
       console.log(`❌ Service Center ${spareRequest.requested_source_id} not found`);
       return res.status(404).json({
         ok: false,
-        error: 'Service center not found'
+        error: `Service center not found: ID ${spareRequest.requested_source_id}`
       });
     }
 
@@ -58,7 +83,7 @@ router.post('/sync-sap', authenticateToken, requireRole(['rsm', 'admin', 'servic
       console.log(`❌ No plant assigned to ASC ${spareRequest.requested_source_id}`);
       return res.status(400).json({
         ok: false,
-        error: 'No plant assigned to this service center'
+        error: 'No plant assigned to this service center. Please contact administrator.'
       });
     }
 
@@ -66,7 +91,14 @@ router.post('/sync-sap', authenticateToken, requireRole(['rsm', 'admin', 'servic
 
     // Verify that the request has been approved by RSM
     // Check if the associated status is 'approved_by_rsm'
-    const statusRecord = await sequelize.models.Status.findByPk(spareRequest.status_id);
+    let statusRecord;
+    try {
+      statusRecord = await sequelize.models.Status.findByPk(spareRequest.status_id);
+    } catch (err) {
+      console.error(`❌ Error fetching status ${spareRequest.status_id}:`, err.message);
+      return res.status(500).json({ ok: false, error: 'Failed to fetch request status' });
+    }
+    
     const statusName = statusRecord?.status_name || '';
     
     if (statusName !== 'approved_by_rsm') {
@@ -90,19 +122,37 @@ router.post('/sync-sap', authenticateToken, requireRole(['rsm', 'admin', 'servic
     });
 
     // Generate mock SAP data
-    const sapData = generateMockSAPData(spareRequest, items);
+    let sapData;
+    try {
+      sapData = generateMockSAPData(spareRequest, items);
+    } catch (err) {
+      console.error(`❌ Error generating SAP data:`, err.message);
+      return res.status(500).json({ ok: false, error: 'Failed to generate SAP documents' });
+    }
 
     // Format data for database storage
     // Source: Plant assigned to ASC (auto-determined)
     // Destination: The ASC that requested the spares
     console.log(`📝 Using Plant ${plantId} as source warehouse (from ASC assignment)`);
-    const formattedData = formatSAPDataForDB(sapData, 
-      { type: 'warehouse', id: plantId }, 
-      { type: 'service_center', id: spareRequest.requested_source_id }
-    );
+    let formattedData;
+    try {
+      formattedData = formatSAPDataForDB(sapData, 
+        { type: 'warehouse', id: plantId }, 
+        { type: 'service_center', id: spareRequest.requested_source_id }
+      );
+    } catch (err) {
+      console.error(`❌ Error formatting SAP data:`, err.message);
+      return res.status(500).json({ ok: false, error: 'Failed to format SAP data for database' });
+    }
 
     // Start transaction
-    const transaction = await sequelize.transaction();
+    let transaction;
+    try {
+      transaction = await sequelize.transaction();
+    } catch (err) {
+      console.error(`❌ Error starting transaction:`, err.message);
+      return res.status(500).json({ ok: false, error: 'Failed to start database transaction' });
+    }
 
     try {
       // Create logistics documents for each document type (SO, DN, CHALLAN)
@@ -113,23 +163,36 @@ router.post('/sync-sap', authenticateToken, requireRole(['rsm', 'admin', 'servic
         const { items: docItems, ...docRecord } = docData;
 
         // Create main logistics document
-        const logisticsDoc = await sequelize.models.LogisticsDocuments.create(
-          docRecord,
-          { transaction }
-        );
+        let logisticsDoc;
+        try {
+          logisticsDoc = await sequelize.models.LogisticsDocuments.create(
+            docRecord,
+            { transaction }
+          );
+        } catch (err) {
+          console.error(`❌ Error creating logistics document:`, err.message);
+          await transaction.rollback();
+          return res.status(500).json({ ok: false, error: 'Failed to create logistics document' });
+        }
 
         // Create line items
         for (const item of (docItems || [])) {
-          await sequelize.models.LogisticsDocumentItems.create(
-            {
-              document_id: logisticsDoc.id,
-              spare_part_id: item.spare_part_id,
-              qty: item.supplied_qty || item.received_qty || 0,
-              uom: item.uom || 'PCS',
-              hsn: item.hsn || null
-            },
-            { transaction }
-          );
+          try {
+            await sequelize.models.LogisticsDocumentItems.create(
+              {
+                document_id: logisticsDoc.id,
+                spare_part_id: item.spare_part_id,
+                qty: item.supplied_qty || item.received_qty || 0,
+                uom: item.uom || 'PCS',
+                hsn: item.hsn || null
+              },
+              { transaction }
+            );
+          } catch (err) {
+            console.error(`❌ Error creating logistics document item:`, err.message);
+            await transaction.rollback();
+            return res.status(500).json({ ok: false, error: 'Failed to create document item' });
+          }
         }
 
         // If this is a DN document, save it to create stock_movement later
@@ -148,24 +211,32 @@ router.post('/sync-sap', authenticateToken, requireRole(['rsm', 'admin', 'servic
         const totalQty = items.reduce((sum, item) => sum + (item.approved_qty || 0), 0);
 
         // Create stock_movement with the SAP-generated DN as reference_no
-        const stockMovement = await sequelize.models.StockMovement.create(
-          {
-            stock_movement_type: 'FILLUP_DISPATCH',
-            reference_type: 'spare_request',
-            reference_no: dnDocument.document_number,  // ✅ Use actual SAP-generated DN
-            source_location_type: 'plant',  // Plant warehouse location
-            source_location_id: plantId,
-            destination_location_type: 'service_center',
-            destination_location_id: spareRequest.requested_source_id,
-            total_qty: totalQty,
-            movement_date: new Date(),
-            status: 'pending',  // Pending until physically received
-            bucket: 'GOOD',  // ✅ Added required field
-            bucket_operation: 'DECREASE',  // ✅ Added required field
-            created_by: req.user?.id || 1
-          },
-          { transaction }
-        );
+        let stockMovement;
+        try {
+          stockMovement = await sequelize.models.StockMovement.create(
+            {
+              stock_movement_type: 'FILLUP_DISPATCH',
+              reference_type: 'spare_request',
+              reference_no: dnDocument.document_number,  // ✅ Use actual SAP-generated DN
+              source_location_type: 'plant',  // Plant warehouse location
+              source_location_id: plantId,
+              destination_location_type: 'service_center',
+              destination_location_id: spareRequest.requested_source_id,
+              total_qty: totalQty,
+              movement_date: new Date(),
+              status: 'pending',  // Pending until physically received
+              bucket: 'GOOD',  // ✅ Added required field
+              bucket_operation: 'DECREASE',  // ✅ Added required field
+              created_by: req.user?.id || 1
+            },
+            { transaction }
+          );
+        } catch (err) {
+          console.error(`❌ Error creating stock movement:`, err.message);
+          if (err.sql) console.error('SQL:', err.sql);
+          await transaction.rollback();
+          return res.status(500).json({ ok: false, error: 'Failed to create stock movement' });
+        }
 
         console.log(`✅ Stock movement created: ID=${stockMovement.movement_id}, DN=${dnDocument.document_number}`);
 
@@ -176,73 +247,91 @@ router.post('/sync-sap', authenticateToken, requireRole(['rsm', 'admin', 'servic
           
           if (approvedQty > 0) {
             // DECREASE at source (plant warehouse)
-            const sourceInventory = await sequelize.models.SpareInventory.findOne({
-              where: {
-                spare_id: item.spare_id,
-                location_type: 'plant',
-                location_id: plantId
-              },
-              transaction
-            });
-            
-            if (sourceInventory) {
-              await sourceInventory.update({
-                qty_good: (sourceInventory.qty_good || 0) - approvedQty
-              }, { transaction });
-              console.log(`✅ Decreased plant inventory: spare_id=${item.spare_id}, qty=${approvedQty}`);
+            try {
+              const sourceInventory = await sequelize.models.SpareInventory.findOne({
+                where: {
+                  spare_id: item.spare_id,
+                  location_type: 'plant',
+                  location_id: plantId
+                },
+                transaction
+              });
+              
+              if (sourceInventory) {
+                await sourceInventory.update({
+                  qty_good: (sourceInventory.qty_good || 0) - approvedQty
+                }, { transaction });
+                console.log(`✅ Decreased plant inventory: spare_id=${item.spare_id}, qty=${approvedQty}`);
+              }
+            } catch (err) {
+              console.error(`❌ Error updating source inventory:`, err.message);
+              await transaction.rollback();
+              return res.status(500).json({ ok: false, error: 'Failed to update source inventory' });
             }
             
             // INCREASE at destination (service center)
-            const destinationInventory = await sequelize.models.SpareInventory.findOne({
-              where: {
-                spare_id: item.spare_id,
-                location_type: 'service_center',
-                location_id: spareRequest.requested_source_id
-              },
-              transaction
-            });
-            
-            if (destinationInventory) {
-              await destinationInventory.update({
-                qty_good: (destinationInventory.qty_good || 0) + approvedQty
-              }, { transaction });
-              console.log(`✅ Increased service_center inventory: spare_id=${item.spare_id}, qty=${approvedQty}`);
-            } else {
-              // Create new inventory record if it doesn't exist
-              await sequelize.models.SpareInventory.create({
-                spare_id: item.spare_id,
-                location_type: 'service_center',
-                location_id: spareRequest.requested_source_id,
-                qty_good: approvedQty,
-                qty_defective: 0
-              }, { transaction });
-              console.log(`✅ Created new service_center inventory: spare_id=${item.spare_id}, qty=${approvedQty}`);
+            try {
+              const destinationInventory = await sequelize.models.SpareInventory.findOne({
+                where: {
+                  spare_id: item.spare_id,
+                  location_type: 'service_center',
+                  location_id: spareRequest.requested_source_id
+                },
+                transaction
+              });
+              
+              if (destinationInventory) {
+                await destinationInventory.update({
+                  qty_good: (destinationInventory.qty_good || 0) + approvedQty
+                }, { transaction });
+                console.log(`✅ Increased service_center inventory: spare_id=${item.spare_id}, qty=${approvedQty}`);
+              } else {
+                // Create new inventory record if it doesn't exist
+                await sequelize.models.SpareInventory.create({
+                  spare_id: item.spare_id,
+                  location_type: 'service_center',
+                  location_id: spareRequest.requested_source_id,
+                  qty_good: approvedQty,
+                  qty_defective: 0
+                }, { transaction });
+                console.log(`✅ Created new service_center inventory: spare_id=${item.spare_id}, qty=${approvedQty}`);
+              }
+            } catch (err) {
+              console.error(`❌ Error updating destination inventory:`, err.message);
+              await transaction.rollback();
+              return res.status(500).json({ ok: false, error: 'Failed to update destination inventory' });
             }
           }
         }
 
         // Create cartons for items
         for (const item of items) {
-          const carton = await sequelize.models.Cartons.create(
-            {
-              movement_id: stockMovement.movement_id,
-              carton_number: `CTN-${dnDocument.document_number}-${item.spare_id}`,
-              status: 'pending'
-            },
-            { transaction }
-          );
+          try {
+            const carton = await sequelize.models.Cartons.create(
+              {
+                movement_id: stockMovement.movement_id,
+                carton_number: `CTN-${dnDocument.document_number}-${item.spare_id}`,
+                status: 'pending'
+              },
+              { transaction }
+            );
 
-          // Create goods movement item for this spare
-          await sequelize.models.GoodsMovementItems.create(
-            {
-              movement_id: stockMovement.movement_id,
-              carton_id: carton.carton_id,
-              spare_part_id: item.spare_id,
-              qty: item.approved_qty || 0,
-              condition: 'good'
-            },
-            { transaction }
-          );
+            // Create goods movement item for this spare
+            await sequelize.models.GoodsMovementItems.create(
+              {
+                movement_id: stockMovement.movement_id,
+                carton_id: carton.carton_id,
+                spare_part_id: item.spare_id,
+                qty: item.approved_qty || 0,
+                condition: 'good'
+              },
+              { transaction }
+            );
+          } catch (err) {
+            console.error(`❌ Error creating carton/goods items:`, err.message);
+            await transaction.rollback();
+            return res.status(500).json({ ok: false, error: 'Failed to create cartons' });
+          }
         }
 
         console.log(`✅ Cartons and goods items created for stock_movement`);
@@ -260,7 +349,13 @@ router.post('/sync-sap', authenticateToken, requireRole(['rsm', 'admin', 'servic
       });
 
     } catch (error) {
-      await transaction.rollback();
+      if (transaction) {
+        try {
+          await transaction.rollback();
+        } catch (rollbackErr) {
+          console.error('Error rolling back transaction:', rollbackErr.message);
+        }
+      }
       throw error;
     }
 
@@ -269,7 +364,9 @@ router.post('/sync-sap', authenticateToken, requireRole(['rsm', 'admin', 'servic
     if (error.sql) {
       console.error('SQL Query:', error.sql);
     }
-    console.error('Full stack:', error.stack);
+    if (error.stack) {
+      console.error('Full stack:', error.stack);
+    }
     res.status(500).json({ ok: false, error: error.message, details: error.sql || error.stack });
   }
 });
@@ -331,6 +428,9 @@ router.get('/track/:requestId', authenticateToken, async (req, res) => {
       documentsByType[doc.document_type] = doc.toJSON();
     });
 
+    // Fetch invoice from SAPDocuments
+    const invoice = await getInvoiceByRequestId(requestId, sequelize);
+
     // Format response
     const trackingInfo = {
       ok: true,
@@ -344,7 +444,13 @@ router.get('/track/:requestId', authenticateToken, async (req, res) => {
         salesOrder: documentsByType['SO'] || null,
         deliveryNote: documentsByType['DN'] || null,
         challan: documentsByType['CHALLAN'] || null
-      }
+      },
+      invoice: invoice ? {
+        invoice_number: invoice.sap_doc_number,
+        amount: invoice.amount,
+        status: invoice.status,
+        created_at: invoice.sap_created_at
+      } : null
     };
 
     res.json(trackingInfo);
@@ -387,13 +493,24 @@ router.get('/documents/:spareRequestId', authenticateToken, async (req, res) => 
       return res.json({
         ok: true,
         documents: [],
+        invoice: null,
         message: 'No logistics documents found for this request'
       });
     }
 
+    // Fetch invoice from SAPDocuments
+    const invoice = await getInvoiceByRequestId(spareRequestId, sequelize);
+
     res.json({
       ok: true,
-      documents: documents.map(doc => doc.toJSON())
+      documents: documents.map(doc => doc.toJSON()),
+      invoice: invoice ? {
+        invoice_number: invoice.sap_doc_number,
+        amount: invoice.amount,
+        status: invoice.status,
+        reference_id: invoice.reference_id,  // SO number
+        created_at: invoice.sap_created_at
+      } : null
     });
 
   } catch (error) {
@@ -451,6 +568,9 @@ router.get('/summary/:spareRequestId', authenticateToken, async (req, res) => {
     const deliveryNote = documents.find(d => d.document_type === 'DN');
     const challan = documents.find(d => d.document_type === 'CHALLAN');
 
+    // Fetch invoice from SAPDocuments
+    const invoice = await getInvoiceByRequestId(spareRequestId, sequelize);
+
     const summary = {
       ok: true,
       request: {
@@ -478,6 +598,13 @@ router.get('/summary/:spareRequestId', authenticateToken, async (req, res) => {
         date: challan.document_date,
         status: challan.status,
         transportDetails: challan.transportDetails || {}
+      } : null,
+      invoice: invoice ? {
+        number: invoice.sap_doc_number,
+        date: invoice.sap_created_at,
+        amount: invoice.amount,
+        status: invoice.status,
+        reference_doc: invoice.reference_id  // SO number
       } : null,
       items: (spareRequest.SpareRequestItems || []).map((item, idx) => ({
         lineNo: idx + 1,
@@ -746,6 +873,10 @@ router.post('/receive-delivery', authenticateToken, requireRole(['service_center
 
     console.log('✅ Logistics document status updated');
 
+    // Fetch invoice from SAPDocuments for this request
+    console.log(`📝 Fetching invoice for request ${requestId} from SAPDocuments...`);
+    const invoiceData = await getInvoiceByRequestId(requestId, sequelize);
+
     res.status(201).json({
       ok: true,
       message: `${documentType} received successfully at ASC`,
@@ -758,7 +889,13 @@ router.post('/receive-delivery', authenticateToken, requireRole(['service_center
         movement: result.movement,
         inventory: result.inventory,
         itemsReceived: items.length,
-        totalQtyReceived: items.reduce((sum, item) => sum + (item.qty || 0), 0)
+        totalQtyReceived: items.reduce((sum, item) => sum + (item.qty || 0), 0),
+        invoice: invoiceData ? {
+          invoice_number: invoiceData.sap_doc_number,
+          amount: invoiceData.amount,
+          status: invoiceData.status,
+          created_at: invoiceData.sap_created_at
+        } : null
       }
     });
 

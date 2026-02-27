@@ -1,4 +1,6 @@
-const API_BASE = 'http://localhost:5000/api';
+import { getApiUrl } from '../config/apiConfig';
+
+const API_BASE = getApiUrl('');
 
 /**
  * Fetch all spare return requests for authenticated service center

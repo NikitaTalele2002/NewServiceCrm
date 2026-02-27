@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
+import { getApiUrl } from '../../../config/apiConfig';
 import './ViewCart.css';
 
 export default function ViewCart() {
@@ -42,7 +43,7 @@ export default function ViewCart() {
 
     setLoading(true);
     try {
-      const response = await fetch('/api/spare-returns/create', {
+      const response = await fetch(getApiUrl('/spare-returns/create'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

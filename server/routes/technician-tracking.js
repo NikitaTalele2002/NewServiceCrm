@@ -8,6 +8,7 @@ import {
   Technicians,
 } from '../models/index.js';
 import { sequelize } from '../db.js';
+import { recordCallSpareUsage } from '../services/callSpareUsageService.js';
 
 const router = express.Router();
 
@@ -103,9 +104,26 @@ router.get('/spare-consumption/call/:callId', async (req, res) => {
 
 /**
  * POST /api/technician-tracking/spare-consumption
- * Create a new spare consumption record
+ * Create a new spare consumption record with defective tracking
+ * 
+ * Request body:
+ * {
+ *   call_id: number,
+ *   spare_part_id: number,
+ *   issued_qty: number,
+ *   used_qty: number,           // Qty of spare part used to replace defective part
+ *   returned_qty?: number,       // Qty to be returned (default: issued_qty - used_qty)
+ *   used_by_tech_id: number,
+ *   remarks?: string
+ * }
+ * 
+ * When used_qty > 0, the defective part (removed during replacement) is tracked:
+ * - spare_inventory.qty_defective increases by used_qty
+ * - spare_inventory.qty_good decreases by used_qty
  */
 router.post('/spare-consumption', async (req, res) => {
+  const transaction = await sequelize.transaction();
+  
   try {
     const {
       call_id,
@@ -118,14 +136,48 @@ router.post('/spare-consumption', async (req, res) => {
     } = req.body;
 
     if (!call_id || !spare_part_id || !issued_qty) {
+      await transaction.rollback();
       return res.status(400).json({
         ok: false,
         error: 'Missing required fields: call_id, spare_part_id, issued_qty',
       });
     }
 
-    const usage_status = used_qty === 0 ? 'NOT_USED' : used_qty < issued_qty ? 'PARTIAL' : 'USED';
+    // Get technician ID from call if not provided
+    let technicianId = used_by_tech_id;
+    if (!technicianId) {
+      const [callData] = await sequelize.query(
+        `SELECT assigned_tech_id FROM calls WHERE call_id = ?`,
+        { replacements: [call_id], transaction }
+      );
+      if (callData && callData.length > 0) {
+        technicianId = callData[0].assigned_tech_id;
+      }
+    }
 
+    if (!technicianId) {
+      await transaction.rollback();
+      return res.status(400).json({
+        ok: false,
+        error: 'Technician ID not found. Provide used_by_tech_id or ensure call has assigned_tech_id',
+      });
+    }
+
+    const finalUsedQty = used_qty || 0;
+    const finalReturnedQty = returned_qty !== undefined ? returned_qty : (issued_qty - finalUsedQty);
+    const usage_status = finalUsedQty === 0 ? 'NOT_USED' : finalUsedQty < issued_qty ? 'PARTIAL' : 'USED';
+
+    console.log('\n' + '='.repeat(70));
+    console.log('📝 RECORDING SPARE CONSUMPTION WITH DEFECTIVE TRACKING');
+    console.log('='.repeat(70));
+    console.log(`Call ID: ${call_id}`);
+    console.log(`Spare Part ID: ${spare_part_id}`);
+    console.log(`Issued Qty: ${issued_qty}`);
+    console.log(`Used Qty (defective to be returned): ${finalUsedQty}`);
+    console.log(`Returned Qty: ${finalReturnedQty}`);
+    console.log(`Technician ID: ${technicianId}`);
+
+    // Step 1: Record usage in call_spare_usage
     const sql = `
       INSERT INTO call_spare_usage 
       (call_id, spare_part_id, issued_qty, used_qty, returned_qty, usage_status, used_by_tech_id, remarks, created_at, updated_at)
@@ -149,29 +201,105 @@ router.post('/spare-consumption', async (req, res) => {
         call_id,
         spare_part_id,
         issued_qty,
-        used_qty: used_qty || 0,
-        returned_qty: returned_qty || issued_qty - (used_qty || 0),
+        used_qty: finalUsedQty,
+        returned_qty: finalReturnedQty,
         usage_status,
-        used_by_tech_id: used_by_tech_id || null,
+        used_by_tech_id: technicianId,
         remarks: remarks || null,
       },
+      transaction
     });
+
+    const usageId = result[0]?.usage_id || result[0];
+    console.log(`✅ Recorded in call_spare_usage (ID: ${usageId})`);
+
+    // Step 2: Update technician's spare inventory - track defective spares
+    // When used_qty > 0: the technician removed a defective part and installed the spare
+    // So we track that defective part in technician's inventory
+    if (finalUsedQty > 0) {
+      console.log(`\n🔴 DEFECTIVE TRACKING:`);
+      console.log(`   Technician removed ${finalUsedQty} defective part(s) during replacement`);
+      
+      // Try to update existing record first
+      const updateResult = await sequelize.query(`
+        UPDATE spare_inventory
+        SET 
+          qty_good = CASE WHEN qty_good >= ? THEN qty_good - ? ELSE 0 END,
+          qty_defective = qty_defective + ?,
+          updated_at = GETDATE()
+        WHERE spare_id = ?
+          AND location_type = 'technician'
+          AND location_id = ?
+      `, {
+        replacements: [finalUsedQty, finalUsedQty, finalUsedQty, spare_part_id, technicianId],
+        transaction
+      });
+
+      // If no rows were updated, insert a new record
+      if (updateResult[1] === 0) {
+        console.log(`   ℹ️ No existing record, creating new inventory entry...`);
+        await sequelize.query(`
+          INSERT INTO spare_inventory (
+            spare_id, location_type, location_id, qty_good, qty_defective, 
+            created_at, updated_at
+          ) VALUES (
+            ?, 'technician', ?, 0, ?, GETDATE(), GETDATE()
+          )
+        `, {
+          replacements: [spare_part_id, technicianId, finalUsedQty],
+          transaction
+        });
+      }
+
+      console.log(`   ✅ Updated technician inventory:`);
+      console.log(`      - qty_good decreased by ${finalUsedQty}`);
+      console.log(`      - qty_defective increased by ${finalUsedQty}`);
+    }
+
+    // Step 3: Create stock movement record for audit trail (optional - table may not exist)
+    if (finalUsedQty > 0) {
+      try {
+        await sequelize.query(`
+          INSERT INTO stock_movements (
+            spare_id, location_type, location_id, movement_type, 
+            quantity, reference_type, reference_id, created_at, updated_at
+          ) VALUES (
+            ?, 'technician', ?, 'DEFECTIVE_TRACKED',
+            ?, 'call_spare_usage', ?, GETDATE(), GETDATE()
+          )
+        `, {
+          replacements: [spare_part_id, technicianId, finalUsedQty, usageId],
+          transaction
+        });
+        console.log(`   ✅ Movement record created (DEFECTIVE_TRACKED)`);
+      } catch (mvtErr) {
+        // Stock movements table might not exist, but it's not critical
+        console.log(`   ⚠️ Stock movement not recorded: ${mvtErr.message.substring(0, 50)}...`);
+      }
+    }
+
+    await transaction.commit();
+    console.log(`\n✅ Spare consumption recorded successfully\n`);
 
     res.json({
       ok: true,
-      message: 'Spare consumption recorded successfully',
-      usage_id: result[0]?.usage_id || result[0],
+      message: 'Spare consumption recorded successfully with defective tracking',
+      usage_id: usageId,
       data: {
         call_id,
         spare_part_id,
         issued_qty,
-        used_qty: used_qty || 0,
-        returned_qty: returned_qty || issued_qty - (used_qty || 0),
+        used_qty: finalUsedQty,
+        returned_qty: finalReturnedQty,
         usage_status,
+        technician_id: technicianId,
+        defective_tracked: finalUsedQty > 0,
+        remarks,
       },
     });
   } catch (err) {
-    console.error('Error creating spare consumption:', err);
+    await transaction.rollback();
+    console.error('❌ Error creating spare consumption:', err);
     res.status(500).json({
       ok: false,
       error: err.message,
@@ -587,6 +715,269 @@ router.get('/summary/:callId', async (req, res) => {
     });
   } catch (err) {
     console.error('Error fetching summary:', err);
+    res.status(500).json({
+      ok: false,
+      error: err.message,
+    });
+  }
+});
+
+/**
+ * POST /api/technician-tracking/call/:callId/close
+ * Close a call and trigger stock movements for spare usage tracking
+ * 
+ * When a call is closed:
+ * 1. Get all call_spare_usage records for this call
+ * 2. Calculate total used_qty across all spares
+ * 3. Create ONE single stock_movement for the call closure 
+ *    (from technician GOOD to technician DEFECTIVE)
+ * 4. Update spare_inventory for each spare (qty_good -=, qty_defective +=)
+ * 5. Update call status to CLOSED/REPAIR_CLOSED
+ * 
+ * Request:
+ * {
+ *   "technician_id": number,
+ *   "call_id": number,
+ *   "status": "CLOSED" | "REPAIR_CLOSED"
+ * }
+ */
+router.post('/call/:callId/close', async (req, res) => {
+  const transaction = await sequelize.transaction();
+  
+  try {
+    const { callId } = req.params;
+    const { technician_id, status = 'CLOSED' } = req.body;
+
+    console.log('\n' + '='.repeat(70));
+    console.log('📋 CLOSING CALL - PROCESSING SPARE USAGE');
+    console.log('='.repeat(70));
+    console.log(`Call ID: ${callId}`);
+    console.log(`Technician ID: ${technician_id}`);
+    console.log(`New Status: ${status}`);
+
+    // Step 1: Get all spare usage records for this call with used_qty > 0
+    console.log('\n1️⃣ Getting spare usage records...');
+    const usageRecords = await sequelize.query(`
+      SELECT 
+        usage_id,
+        call_id,
+        spare_part_id,
+        issued_qty,
+        used_qty,
+        returned_qty,
+        usage_status,
+        used_by_tech_id
+      FROM call_spare_usage
+      WHERE call_id = ? AND used_qty > 0
+      ORDER BY usage_id DESC
+    `, {
+      replacements: [callId],
+      transaction
+    });
+
+    const spareUsages = usageRecords[0] || [];
+    console.log(`   Found ${spareUsages.length} spare usage record(s) with used_qty > 0`);
+
+    // Step 2: Calculate total quantity and get technician ID
+    let totalUsedQty = 0;
+    let technicianId = technician_id;
+    const itemsForMovement = [];
+
+    for (const usage of spareUsages) {
+      totalUsedQty += usage.used_qty;
+      
+      // Use technician from first record if not provided in request
+      if (!technicianId && usage.used_by_tech_id) {
+        technicianId = usage.used_by_tech_id;
+      }
+      
+      itemsForMovement.push(usage);
+    }
+
+    console.log(`   Total used quantity: ${totalUsedQty}`);
+    console.log(`   Technician ID: ${technicianId}`);
+
+    let movementId = null;
+    let inventoryUpdated = 0;
+
+    // Step 3: Create ONE single stock movement for the call closure
+    // This moves spares from technician's GOOD bucket to DEFECTIVE bucket (internal transfer)
+    if (totalUsedQty > 0 && technicianId) {
+      console.log(`\n2️⃣ Creating SINGLE stock movement (technician internal transfer)...`);
+      
+      try {
+        const [movementResult] = await sequelize.query(`
+          INSERT INTO stock_movement (
+            stock_movement_type,
+            bucket,
+            bucket_operation,
+            reference_type,
+            reference_no,
+            source_location_type,
+            source_location_id,
+            destination_location_type,
+            destination_location_id,
+            total_qty,
+            movement_date,
+            created_by,
+            status,
+            created_at,
+            updated_at
+          )
+          VALUES (
+            'DEFECTIVE_MARKING',
+            'GOOD',
+            'DECREASE',
+            'call_spare_usage',
+            'CALL-' + CAST(? AS VARCHAR),
+            'technician',
+            ?,
+            'technician',
+            ?,
+            ?,
+            GETDATE(),
+            ?,
+            'completed',
+            GETDATE(),
+            GETDATE()
+          );
+          SELECT SCOPE_IDENTITY() as movement_id;
+        `, {
+          replacements: [callId, technicianId, technicianId, totalUsedQty, technician_id || null],
+          transaction,
+          raw: true
+        });
+        
+        movementId = movementResult?.[0]?.movement_id;
+        
+        if (movementId) {
+          console.log(`   ✅ Stock movement created: ID=${movementId} (technician→technician internal transfer)`);
+          console.log(`      Type: DEFECTIVE_MARKING | Qty: ${totalUsedQty}`);
+        } else {
+          console.log(`   ⚠️  Stock movement created but no ID returned`);
+        }
+      } catch (mvtErr) {
+        console.error(`   ⚠️  Error creating stock movement:`, mvtErr.message);
+        // Don't fail the entire operation if stock movement fails
+      }
+
+      // Step 4: Create goods_movement_items for each spare in the single movement
+      if (movementId) {
+        console.log(`\n3️⃣ Creating goods movement items...`);
+        for (const usage of itemsForMovement) {
+          try {
+            await sequelize.query(`
+              INSERT INTO goods_movement_items (
+                movement_id, spare_part_id, qty, condition, created_at, updated_at
+              ) VALUES (
+                ?, ?, ?, 'defective', GETDATE(), GETDATE()
+              )
+            `, {
+              replacements: [movementId, usage.spare_part_id, usage.used_qty],
+              transaction
+            });
+            console.log(`   ✅ Goods item created: spare_id=${usage.spare_part_id}, qty=${usage.used_qty}`);
+          } catch (gmiErr) {
+            console.error(`   ⚠️  Error creating goods_movement_item for spare ${usage.spare_part_id}:`, gmiErr.message);
+          }
+        }
+      }
+
+      // Step 5: Update spare_inventory for each spare
+      // Decrease qty_good (spares used from good stock)
+      // Increase qty_defective (spares marked as defective during call)
+      console.log(`\n4️⃣ Updating spare inventory...`);
+      for (const usage of itemsForMovement) {
+        const usedQty = usage.used_qty;
+        const spareId = usage.spare_part_id;
+        const usageTechId = usage.used_by_tech_id || technicianId;
+
+        try {
+          // First, try to UPDATE existing inventory
+          const updateResult = await sequelize.query(`
+            UPDATE spare_inventory
+            SET qty_good = CASE WHEN qty_good >= ? THEN qty_good - ? ELSE 0 END,
+                qty_defective = qty_defective + ?,
+                updated_at = GETDATE()
+            WHERE spare_id = ?
+              AND location_type = 'technician'
+              AND location_id = ?
+          `, {
+            replacements: [usedQty, usedQty, usedQty, spareId, usageTechId],
+            transaction
+          });
+
+          if (updateResult[1] && updateResult[1] > 0) {
+            console.log(`   ✅ Inventory updated: spare_id=${spareId}, qty_good-=${usedQty}, qty_defective+=${usedQty}`);
+            inventoryUpdated++;
+          } else {
+            // If no existing record, create new one
+            console.log(`   ℹ️  No existing inventory, creating new entry for spare_id=${spareId}`);
+            await sequelize.query(`
+              INSERT INTO spare_inventory (
+                spare_id, location_type, location_id, qty_good, qty_defective,
+                created_at, updated_at
+              ) VALUES (
+                ?, 'technician', ?, 0, ?, GETDATE(), GETDATE()
+              )
+            `, {
+              replacements: [spareId, usageTechId, usedQty],
+              transaction
+            });
+            console.log(`   ✅ Created new inventory entry with qty_defective=${usedQty}`);
+            inventoryUpdated++;
+          }
+        } catch (invErr) {
+          console.error(`   ❌ Error updating inventory for spare ${spareId}:`, invErr.message);
+          throw invErr;
+        }
+      }
+    } else {
+      console.log(`\n2️⃣ No spares with used_qty > 0, skipping stock movement creation`);
+    }
+
+    // Step 6: Update call status to CLOSED/REPAIR_CLOSED
+    console.log(`\n5️⃣ Updating call status to ${status}...`);
+    const statusUpdate = await sequelize.query(`
+      UPDATE calls
+      SET status = ?,
+          updated_at = GETDATE()
+      WHERE call_id = ?
+    `, {
+      replacements: [status, callId],
+      transaction
+    });
+
+    if (statusUpdate[1] === 0) {
+      throw new Error(`Call ${callId} not found`);
+    }
+
+    console.log(`   ✅ Call status updated to ${status}`);
+
+    // Commit transaction
+    await transaction.commit();
+    console.log(`\n✅ CALL CLOSED SUCCESSFULLY\n`);
+
+    res.json({
+      ok: true,
+      message: 'Call closed and spare movements processed',
+      callId,
+      data: {
+        call_id: callId,
+        status,
+        spare_movements: {
+          stock_movement_created: !!movementId,
+          stock_movement_id: movementId,
+          total_spares_used: spareUsages.length,
+          total_qty_processed: totalUsedQty,
+          inventory_updates: inventoryUpdated,
+        },
+      },
+    });
+
+  } catch (err) {
+    await transaction.rollback();
+    console.error('❌ Error closing call:', err);
     res.status(500).json({
       ok: false,
       error: err.message,

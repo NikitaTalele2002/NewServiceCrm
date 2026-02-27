@@ -129,13 +129,28 @@ async function list(req, res){
 
 async function assignTechnician(req, res){
   try{
-    const { complaintId, technicianId } = req.body;
-    const result = await complaintService.assignTechnician({ complaintId, technicianId });
-    return res.json({ message: `Technician ${result.assignedTechnicianName} assigned successfully to complaint ${req.body.complaintId}`, assignedTechnicianId: result.assignedTechnicianId, assignedTechnicianName: result.assignedTechnicianName });
+    const { complaintId, technicianId, assignmentReason } = req.body;
+    const result = await complaintService.assignTechnician({ complaintId, technicianId, assignmentReason });
+    return res.json({ 
+      success: true,
+      message: `Technician ${result.assignedTechnicianName} ${result.isReallocation ? 're-' : ''}assigned successfully to call ${complaintId}`,
+      data: {
+        callId: complaintId,
+        assignedTechnicianId: result.assignedTechnicianId,
+        assignedTechnicianName: result.assignedTechnicianName,
+        isReallocation: result.isReallocation,
+        status: result.status,
+        statusId: result.statusId
+      }
+    });
   }catch(err){
     console.error('Assign tech error:', err);
     const status = err.status || 500;
-    return res.status(status).json({ message: err.message || 'Error assigning technician', error: err && err.message ? err.message : String(err) });
+    return res.status(status).json({ 
+      success: false,
+      message: err.message || 'Error assigning technician', 
+      error: err && err.message ? err.message : String(err) 
+    });
   }
 }
 

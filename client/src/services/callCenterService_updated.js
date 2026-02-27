@@ -101,6 +101,45 @@ export const registerNewCustomer = async (formData) => {
 };
 
 /**
+ * Update existing customer details
+ */
+export const updateCustomer = async (customerId, formData) => {
+  const user = getCurrentUser();
+  
+  const payload = {
+    name: formData.name,
+    alt_mob_no: formData.alt_mob_no,
+    email: formData.email,
+    house_no: formData.house_no,
+    street_name: formData.street_name,
+    building_name: formData.building_name,
+    area: formData.area,
+    landmark: formData.landmark,
+    city_id: formData.city_id,
+    state_id: formData.state_id,
+    pincode: formData.pincode,
+    created_by: user.userId || user.id,
+  };
+
+  const res = await fetch(`${API_BASE}/call-center/customer/${customerId}`, {
+    method: "PUT",
+    headers: {
+      "Content-Type": "application/json",
+      ...getAuthHeader(),
+    },
+    body: JSON.stringify(payload),
+  });
+
+  if (!res.ok) {
+    const error = await res.json();
+    throw new Error(error.error || "Failed to update customer");
+  }
+
+  const data = await res.json();
+  return data.customer || data;
+};
+
+/**
  * Register product for customer
  */
 export const registerProductForCustomer = async (customerId, productData) => {

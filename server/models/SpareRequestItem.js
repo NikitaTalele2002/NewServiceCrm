@@ -57,7 +57,7 @@ export default (sequelize) => {
         type: DataTypes.DATE,
         defaultValue: DataTypes.NOW,
         field: 'updated_at',
-      },
+      }
     },
     {
       tableName: 'spare_request_items',

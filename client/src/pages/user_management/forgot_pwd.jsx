@@ -3,6 +3,7 @@ import FormInput from "../../components/common/FormInput";
 import Button from "../../components/common/Button";
 import ErrorMessage from "../../components/common/ErrorMessage";
 import SuccessMessage from "../../components/common/SuccessMessage";
+import { getApiUrl } from "../../config/apiConfig";
 
 
 export default function ForgotPwd(){
@@ -23,7 +24,7 @@ export default function ForgotPwd(){
         
         setLoading(true);
         try {
-            const res = await fetch('http://localhost:5000/api/auth/forgot-password', {
+            const res = await fetch(getApiUrl('/auth/forgot-password'), {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ email })

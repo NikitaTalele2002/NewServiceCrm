@@ -1,5 +1,7 @@
 const TEST_TOKEN = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MSwidXNlcm5hbWUiOiJTQ1VzZXIiLCJjZW50ZXJJZCI6NCwicm9sZSI6InNlcnZpY2VfY2VudGVyIiwiaWF0IjoxNzcxMjM1NjU2fQ.oxbba2nqMYdAjWQmJK95SFbKzOf8a6l9AkEdFGFAx5s';
-const API_BASE = 'http://localhost:5000/api';
+import { getApiUrl } from '../config/apiConfig';
+
+const API_BASE = getApiUrl('');
 
 const getToken = () => {
   let token = localStorage.getItem('token');

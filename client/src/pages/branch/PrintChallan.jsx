@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { getApiUrl } from '../../config/apiConfig';
 import Button from '../../components/common/Button';
 
 const PrintChallan = () => {
@@ -19,7 +20,7 @@ const PrintChallan = () => {
       return;
     }
     try {
-      const response = await fetch('/api/returns/branch-requests', {
+      const response = await fetch(getApiUrl('/returns/branch-requests'), {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
@@ -49,7 +50,7 @@ const PrintChallan = () => {
     }
     setLoading(true);
     try {
-      const response = await fetch(`/api/returns/branch-requests/${requestId}/details`, {
+      const response = await fetch(getApiUrl(`/returns/branch-requests/${requestId}/details`), {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'

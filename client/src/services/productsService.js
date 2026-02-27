@@ -1,7 +1,9 @@
+import { getApiUrl } from '../config/apiConfig';
+
 export const searchProductsApi = async (searchParams) => {
   const token = localStorage.getItem('token');
   const params = new URLSearchParams(searchParams);
-  const response = await fetch(`/api/products/search?${params.toString()}`, {
+  const response = await fetch(getApiUrl(`/products/search?${params.toString()}`), {
     headers: { Authorization: `Bearer ${token}` }
   });
   if (!response.ok) throw new Error('Failed to search products');
@@ -10,7 +12,7 @@ export const searchProductsApi = async (searchParams) => {
 
 export const getProductsByPhoneApi = async (phone) => {
   const token = localStorage.getItem('token');
-  const response = await fetch(`/api/products/by-phone/${encodeURIComponent(phone)}`, {
+  const response = await fetch(getApiUrl(`/products/by-phone/${encodeURIComponent(phone)}`), {
     headers: { Authorization: `Bearer ${token}` }
   });
   if (!response.ok) throw new Error('Failed to fetch products by phone');
@@ -19,7 +21,7 @@ export const getProductsByPhoneApi = async (phone) => {
 
 export const getProductGroupsApi = async () => {
   const token = localStorage.getItem('token');
-  const response = await fetch('/api/admin/master-data?type=productgroup', {
+  const response = await fetch(getApiUrl('/admin/master-data?type=productgroup'), {
     headers: { Authorization: `Bearer ${token}` }
   });
   if (!response.ok) throw new Error('Failed to fetch product groups');
@@ -29,7 +31,7 @@ export const getProductGroupsApi = async () => {
 
 export const getProductsApi = async () => {
   const token = localStorage.getItem('token');
-  const response = await fetch('/api/admin/master-data?type=product', {
+  const response = await fetch(getApiUrl('/admin/master-data?type=product'), {
     headers: { Authorization: `Bearer ${token}` }
   });
   if (!response.ok) throw new Error('Failed to fetch products');
@@ -39,7 +41,7 @@ export const getProductsApi = async () => {
 
 export const getModelsApi = async () => {
   const token = localStorage.getItem('token');
-  const response = await fetch('/api/admin/master-data?type=model', {
+  const response = await fetch(getApiUrl('/admin/master-data?type=model'), {
     headers: { Authorization: `Bearer ${token}` }
   });
   if (!response.ok) throw new Error('Failed to fetch models');
@@ -50,7 +52,7 @@ export const getModelsApi = async () => {
 export const searchCustomersApi = async (searchParams) => {
   const token = localStorage.getItem('token');
   const params = new URLSearchParams(searchParams);
-  const response = await fetch(`/api/customers/search?${params.toString()}`, {
+  const response = await fetch(getApiUrl(`/customers/search?${params.toString()}`), {
     headers: { Authorization: `Bearer ${token}` }
   });
   if (!response.ok) throw new Error('Failed to search customers');
@@ -59,7 +61,7 @@ export const searchCustomersApi = async (searchParams) => {
 
 export const assignServiceCentreApi = async (assignmentData) => {
   const token = localStorage.getItem('token');
-  const response = await fetch('/api/assign-service-centre', {
+  const response = await fetch(getApiUrl('/assign-service-centre'), {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -73,7 +75,7 @@ export const assignServiceCentreApi = async (assignmentData) => {
 
 export const createComplaintApi = async (complaintData) => {
   const token = localStorage.getItem('token');
-  const response = await fetch('/api/complaints', {
+  const response = await fetch(getApiUrl('/complaints'), {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -93,7 +95,7 @@ export const getInventoryApi = async (filters = {}) => {
   if (filters.productType) params.append('productType', filters.productType);
   if (filters.model) params.append('model', filters.model);
 
-  const response = await fetch(`/api/inventory/current?${params.toString()}`, {
+  const response = await fetch(getApiUrl(`/inventory/current?${params.toString()}`), {
     headers: { Authorization: `Bearer ${token}` }
   });
   if (!response.ok) throw new Error('Failed to fetch inventory');

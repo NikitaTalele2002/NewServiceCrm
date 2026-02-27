@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { getApiUrl } from '../../../config/apiConfig';
 import './SparePartReturnRequest.css';
 
 export default function SparePartReturnRequest() {
@@ -52,7 +53,7 @@ export default function SparePartReturnRequest() {
     const fetchServiceCenterInventory = async () => {
       try {
         console.log('🔄 Fetching service center inventory for centerId:', centerId);
-        const response = await fetch(`/api/spare-returns/inventory`, {
+        const response = await fetch(getApiUrl(`/spare-returns/inventory`), {
           headers: { Authorization: `Bearer ${token}` }
         });
         if (response.ok) {
@@ -303,7 +304,7 @@ export default function SparePartReturnRequest() {
 
       console.log('📤 Submitting spare return request with payload:', payload);
 
-      const response = await fetch('/api/spare-returns/create', {
+      const response = await fetch(getApiUrl('/spare-returns/create'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

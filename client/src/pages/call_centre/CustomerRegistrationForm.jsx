@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import FormInput from '../../components/common/FormInput';
 import Button from '../../components/common/Button';
 import LocationSelector from '../../components/LocationSelector';
+import { getApiUrl } from '../../config/apiConfig';
 
 export default function CustomerRegistrationForm({ onCustomerCreated, onCancel, loading }) {
   const [form, setForm] = useState({
@@ -82,7 +83,7 @@ export default function CustomerRegistrationForm({ onCustomerCreated, onCancel, 
 
       console.log('Sending customer registration payload:', payload);
 
-      const res = await fetch('http://localhost:5000/api/call-center/customer', {
+      const res = await fetch(getApiUrl('/call-center/customer'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),

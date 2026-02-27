@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useRole } from '../../context/RoleContext';
+import { getApiUrl } from '../../config/apiConfig';
 
 export default function RsmOrderRequests() {
   const [requests, setRequests] = useState([]);
@@ -27,7 +28,7 @@ export default function RsmOrderRequests() {
       setError(null);
       try {
         const token = localStorage.getItem('token');
-        const res = await fetch('http://localhost:5000/api/rsm/spare-requests', {
+        const res = await fetch(getApiUrl('/rsm/spare-requests'), {
           headers: { 'Authorization': `Bearer ${token}` }
         });
         const data = await res.json();
@@ -105,7 +106,7 @@ export default function RsmOrderRequests() {
       }
       
       const res = await fetch(
-        `http://localhost:5000/api/rsm/spare-requests/${selectedRequest.id}/approve`,
+        getApiUrl(`/rsm/spare-requests/${selectedRequest.id}/approve`),
         {
           method: 'POST',
           headers: {
@@ -168,7 +169,7 @@ export default function RsmOrderRequests() {
     try {
       const token = localStorage.getItem('token');
       const res = await fetch(
-        `http://localhost:5000/api/rsm/spare-requests/${selectedRequest.id}/reject`,
+        getApiUrl(`/rsm/spare-requests/${selectedRequest.id}/reject`),
         {
           method: 'POST',
           headers: {

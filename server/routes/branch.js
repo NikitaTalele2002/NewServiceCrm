@@ -968,6 +968,299 @@ router.get('/rsm-branches', authenticateToken, async (req, res) => {
   }
 });
 
+// GET /api/branch/assigned-plants - Get plants assigned to the logged-in RSM
+router.get('/assigned-plants', authenticateToken, requireRole('rsm'), async (req, res) => {
+  try {
+    const userId = req.user.id;
+    console.log('[Assigned Plants] Fetching plants for RSM user:', userId);
+
+    // Get RSM ID from user
+    const rsmRecord = await sequelize.query(
+      'SELECT TOP 1 rsm_id FROM rsms WHERE user_id = ?',
+      { replacements: [userId], type: sequelize.QueryTypes.SELECT }
+    );
+
+    if (!rsmRecord || !rsmRecord[0]) {
+      console.log('[Assigned Plants] RSM record not found for user:', userId);
+      return res.status(403).json({ error: 'RSM record not found' });
+    }
+
+    const rsmId = rsmRecord[0].rsm_id;
+    console.log('[Assigned Plants] Found RSM ID:', rsmId);
+
+    // Get state IDs mapped to this RSM
+    const stateMappings = await sequelize.query(
+      `SELECT DISTINCT state_id FROM rsm_state_mapping 
+       WHERE rsm_user_id = ? AND is_active = 1`,
+      { replacements: [rsmId], type: sequelize.QueryTypes.SELECT }
+    );
+
+    if (!stateMappings || stateMappings.length === 0) {
+      console.log('[Assigned Plants] No state mappings found for RSM:', rsmId);
+      return res.json({ ok: true, plants: [] });
+    }
+
+    const stateIds = stateMappings.map(m => m.state_id);
+    console.log('[Assigned Plants] Mapped state IDs:', stateIds);
+
+    // Get plants in those states
+    const plants = await sequelize.query(
+      `SELECT plant_id, plant_code AS plant_name, state_id 
+       FROM plants 
+       WHERE state_id IN (${stateIds.map(() => '?').join(',')})
+       ORDER BY plant_code`,
+      { replacements: stateIds, type: sequelize.QueryTypes.SELECT }
+    );
+
+    console.log('[Assigned Plants] Found plants:', plants.length);
+    plants.forEach(p => {
+      console.log('[Assigned Plants] Plant - ID:', p.plant_id, 'Name:', p.plant_name);
+    });
+    res.json({ 
+      ok: true, 
+      plants: plants.map(p => ({
+        id: p.plant_id,
+        plant_id: p.plant_id,
+        name: p.plant_name,
+        label: p.plant_name,
+        state_id: p.state_id
+      }))
+    });
+  } catch (err) {
+    console.error('[Assigned Plants] Error:', err.message);
+    console.error('[Assigned Plants] Full Error:', err);
+    res.status(500).json({ error: 'Failed to fetch assigned plants', details: err.message, stack: err.stack });
+  }
+});
+
+// GET /api/branch/current-inventory - Get inventory for a specific plant (RSM) or service center (SC)
+router.get('/current-inventory', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const userRole = (req.user && (req.user.role || req.user.Role || '')).toString().toLowerCase();
+    
+    console.log('[Current Inventory] Request received');
+    console.log('[Current Inventory] User Role:', userRole);
+    console.log('[Current Inventory] userId:', userId);
+
+    // ========== SERVICE CENTER USER ==========
+    if (userRole === 'service_center') {
+      console.log('[Current Inventory] Service Center user detected');
+      
+      // Service centers have inventory at their location_id stored as asc_id
+      const scRecord = await sequelize.query(
+        'SELECT TOP 1 asc_id FROM service_centers WHERE user_id = ?',
+        { replacements: [userId], type: sequelize.QueryTypes.SELECT }
+      );
+
+      if (!scRecord || !scRecord[0]) {
+        console.log('[Current Inventory] Error: Service Center record not found for user:', userId);
+        return res.status(403).json({ error: 'Service Center record not found' });
+      }
+
+      const scId = scRecord[0].asc_id;
+      console.log('[Current Inventory] Service Center ID:', scId);
+
+      const inventory = await sequelize.query(
+        `SELECT 
+          si.spare_inventory_id,
+          si.spare_id,
+          si.location_id,
+          si.location_type,
+          si.qty_good,
+          si.qty_defective,
+          si.qty_in_transit,
+          si.created_at,
+          si.updated_at,
+          sp.Id as spare_part_id,
+          sp.PART as spare_name,
+          sp.ModelID,
+          pm.Id as model_id,
+          pm.MODEL_CODE as model_name,
+          pm.ProductID,
+          pmaster.ID as product_id,
+          pmaster.VALUE as product_name,
+          pmaster.Product_group_ID,
+          pg.Id as product_group_id,
+          pg.VALUE as product_group_name
+         FROM spare_inventory si
+         LEFT JOIN spare_parts sp ON si.spare_id = sp.Id
+         LEFT JOIN ProductModels pm ON sp.ModelID = pm.Id
+         LEFT JOIN ProductMaster pmaster ON pm.ProductID = pmaster.ID
+         LEFT JOIN ProductGroups pg ON pmaster.Product_group_ID = pg.Id
+         WHERE si.location_id = CAST(? AS INT) AND si.location_type = 'service_center'
+         ORDER BY sp.PART`,
+        { replacements: [scId], type: sequelize.QueryTypes.SELECT }
+      );
+
+      console.log('[Current Inventory] Service Center inventory count:', inventory.length);
+
+      return res.json({
+        ok: true,
+        inventory: inventory.map(item => ({
+          spare_inventory_id: item.spare_inventory_id,
+          spare_id: item.spare_id,
+          sku: item.spare_id,
+          PART: item.spare_name || 'Unknown',
+          spare_name: item.spare_name || 'Unknown',
+          product_group: item.product_group_name || 'N/A',
+          product: item.product_name || 'N/A',
+          model: item.model_name || 'N/A',
+          goodQty: item.qty_good || 0,
+          qty_good: item.qty_good || 0,
+          defectiveQty: item.qty_defective || 0,
+          qty_defective: item.qty_defective || 0,
+          qty_in_transit: item.qty_in_transit || 0,
+          total_qty: (item.qty_good || 0) + (item.qty_defective || 0) + (item.qty_in_transit || 0),
+          last_updated: item.updated_at
+        }))
+      });
+    }
+
+    // ========== RSM USER ==========
+    if (userRole !== 'rsm') {
+      return res.status(403).json({ error: 'Only RSM and Service Center users can access this endpoint' });
+    }
+
+    const { plant_id } = req.query;
+    
+    console.log('[Current Inventory] Plant ID from query:', plant_id, 'Type:', typeof plant_id);
+
+    if (!plant_id) {
+      console.log('[Current Inventory] Error: plant_id is required for RSM users');
+      return res.status(400).json({ error: 'plant_id is required' });
+    }
+
+    // Convert plant_id to integer
+    const plantIdInt = parseInt(plant_id, 10);
+    if (isNaN(plantIdInt)) {
+      console.log('[Current Inventory] Error: plant_id must be a number, got:', plant_id);
+      return res.status(400).json({ error: 'plant_id must be a valid number' });
+    }
+
+    console.log('[Current Inventory] Converted plant_id:', plantIdInt);
+    console.log('[Current Inventory] Fetching inventory for plant:', plantIdInt, 'User:', userId);
+
+    // Verify RSM has access to this plant
+    const rsmRecord = await sequelize.query(
+      'SELECT TOP 1 rsm_id FROM rsms WHERE user_id = ?',
+      { replacements: [userId], type: sequelize.QueryTypes.SELECT }
+    );
+
+    if (!rsmRecord || !rsmRecord[0]) {
+      console.log('[Current Inventory] Error: RSM record not found for user:', userId);
+      return res.status(403).json({ error: 'RSM record not found' });
+    }
+
+    const rsmId = rsmRecord[0].rsm_id;
+    console.log('[Current Inventory] RSM ID:', rsmId);
+
+    // Check if this plant is accessible to the RSM
+    const plantAccess = await sequelize.query(
+      `SELECT p.plant_id FROM plants p
+       INNER JOIN rsm_state_mapping rsm ON p.state_id = rsm.state_id
+       WHERE p.plant_id = CAST(? AS INT) AND rsm.rsm_user_id = ? AND rsm.is_active = 1`,
+      { replacements: [plantIdInt, rsmId], type: sequelize.QueryTypes.SELECT }
+    );
+
+    console.log('[Current Inventory] Plant access check for plant_id', plantIdInt, ':', plantAccess);
+
+    if (!plantAccess || plantAccess.length === 0) {
+      console.log('[Current Inventory] Error: RSM not authorized for plant:', plantIdInt);
+      return res.status(403).json({ error: 'Not authorized for this plant' });
+    }
+
+    console.log('[Current Inventory] ✓ Plant access verified for plant_id:', plantIdInt);
+
+    // Get inventory for the plant with spare part details
+    // Query ONLY for location_type='plant' (plants are NOT warehouses)
+    console.log('[Current Inventory] Executing query with parameters:', { plant_id: plantIdInt, location_type: 'plant' });
+    
+    const inventory = await sequelize.query(
+      `SELECT 
+        si.spare_inventory_id,
+        si.spare_id,
+        si.location_id,
+        si.location_type,
+        si.qty_good,
+        si.qty_defective,
+        si.qty_in_transit,
+        si.created_at,
+        si.updated_at,
+        sp.Id as spare_part_id,
+        sp.PART as spare_name,
+        sp.ModelID,
+        pm.Id as model_id,
+        pm.MODEL_CODE as model_name,
+        pm.ProductID,
+        pmaster.ID as product_id,
+        pmaster.VALUE as product_name,
+        pmaster.Product_group_ID,
+        pg.Id as product_group_id,
+        pg.VALUE as product_group_name
+       FROM spare_inventory si
+       LEFT JOIN spare_parts sp ON si.spare_id = sp.Id
+       LEFT JOIN ProductModels pm ON sp.ModelID = pm.Id
+       LEFT JOIN ProductMaster pmaster ON pm.ProductID = pmaster.ID
+       LEFT JOIN ProductGroups pg ON pmaster.Product_group_ID = pg.Id
+       WHERE si.location_id = CAST(? AS INT) AND si.location_type = 'plant'
+       ORDER BY sp.PART`,
+      { replacements: [plantIdInt], type: sequelize.QueryTypes.SELECT }
+    );
+
+    console.log('[Current Inventory] Found inventory items:', inventory.length);
+    console.log('[Current Inventory] Raw inventory data:', JSON.stringify(inventory.slice(0, 2)));
+    
+    if (inventory.length === 0) {
+      console.log('[Current Inventory] No inventory found. Checking if records exist for plant_id:', plantIdInt);
+      
+      // Debug query 1: Check if ANY records exist for this plant_id
+      const allRecords = await sequelize.query(
+        `SELECT location_type, COUNT(*) as total_records FROM spare_inventory 
+         WHERE location_id = CAST(? AS INT)
+         GROUP BY location_type`,
+        { replacements: [plantIdInt], type: sequelize.QueryTypes.SELECT }
+      );
+      console.log('[Current Inventory] Debug - Records by location_type for location_id', plantIdInt, ':', allRecords);
+      
+      // Debug query 3: Get the FIRST few records with location_type='plant' to verify table structure
+      const plantRecordsDetail = await sequelize.query(
+        `SELECT TOP 5 si.spare_inventory_id, si.spare_id, si.location_id, si.location_type, si.qty_good, sp.PART
+         FROM spare_inventory si
+         LEFT JOIN spare_parts sp ON si.spare_id = sp.Id
+         WHERE si.location_type = 'plant'`,
+        { replacements: [], type: sequelize.QueryTypes.SELECT }
+      );
+      console.log('[Current Inventory] Debug - Sample plant records from database:', plantRecordsDetail);
+    }
+
+    res.json({
+      ok: true,
+      inventory: inventory.map(item => ({
+        spare_inventory_id: item.spare_inventory_id,
+        spare_id: item.spare_id,
+        sku: item.spare_id,
+        PART: item.spare_name || 'Unknown',
+        spare_name: item.spare_name || 'Unknown',
+        product_group: item.product_group_name || 'N/A',
+        product: item.product_name || 'N/A',
+        model: item.model_name || 'N/A',
+        goodQty: item.qty_good || 0,
+        qty_good: item.qty_good || 0,
+        defectiveQty: item.qty_defective || 0,
+        qty_defective: item.qty_defective || 0,
+        qty_in_transit: item.qty_in_transit || 0,
+        total_qty: (item.qty_good || 0) + (item.qty_defective || 0) + (item.qty_in_transit || 0),
+        last_updated: item.updated_at
+      }))
+    });
+  } catch (err) {
+    console.error('[Current Inventory] Error:', err.message);
+    console.error('[Current Inventory] Full Error Details:', err);
+    res.status(500).json({ error: 'Failed to fetch inventory', details: err.message });
+  }
+});
+
 // Function to send to SAP HANA and get CN
 async function sendToSapHana(requestNumber, dcfNo) {
   try {

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { getApiUrl } from '../../../config/apiConfig';
 
 export default function SpareReturnRequest() {
   const [returnType, setReturnType] = useState('');
@@ -75,7 +76,7 @@ export default function SpareReturnRequest() {
   const fetchGroups = async () => {
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch(`/api/returns/service-centers/${centerId}/inventory/groups`, {
+      const response = await fetch(getApiUrl(`/returns/service-centers/${centerId}/inventory/groups`), {
         headers: { Authorization: `Bearer ${token}` }
       });
       if (response.ok) {
@@ -90,7 +91,7 @@ export default function SpareReturnRequest() {
   const fetchProducts = async () => {
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch(`/api/returns/service-centers/${centerId}/inventory/products?group=${encodeURIComponent(productGroup)}`, {
+      const response = await fetch(getApiUrl(`/returns/service-centers/${centerId}/inventory/products?group=${encodeURIComponent(productGroup)}`), {
         headers: { Authorization: `Bearer ${token}` }
       });
       if (response.ok) {
@@ -105,7 +106,7 @@ export default function SpareReturnRequest() {
   const fetchModels = async () => {
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch(`/api/returns/service-centers/${centerId}/inventory/models?product=${encodeURIComponent(product)}`, {
+      const response = await fetch(getApiUrl(`/returns/service-centers/${centerId}/inventory/models?product=${encodeURIComponent(product)}`), {
         headers: { Authorization: `Bearer ${token}` }
       });
       if (response.ok) {
@@ -120,7 +121,7 @@ export default function SpareReturnRequest() {
   const fetchSpares = async () => {
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch(`/api/returns/service-centers/${centerId}/inventory/spares?model=${encodeURIComponent(model)}`, {
+      const response = await fetch(getApiUrl(`/returns/service-centers/${centerId}/inventory/spares?model=${encodeURIComponent(model)}`), {
         headers: { Authorization: `Bearer ${token}` }
       });
       if (response.ok) {
@@ -142,7 +143,7 @@ export default function SpareReturnRequest() {
       if (model) params.append('model', model);
       if (sparePart) params.append('spare', sparePart);
 
-      const response = await fetch(`/api/returns/service-centers/${centerId}/inventory?${params}`, {
+      const response = await fetch(getApiUrl(`/returns/service-centers/${centerId}/inventory?${params}`), {
         headers: { Authorization: `Bearer ${token}` }
       });
       if (response.ok) {
@@ -197,7 +198,7 @@ export default function SpareReturnRequest() {
     }
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch('/api/returns', {
+      const response = await fetch(getApiUrl('/returns'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

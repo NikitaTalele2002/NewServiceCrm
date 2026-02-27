@@ -55,12 +55,14 @@ import SAPDocumentItemsFactory from "./SAPDocumentItems.js";
 import ServiceCenterFinancialFactory from "./ServiceCenterFinancial.js";
 import ServiceCenterPincodesFactory from "./ServiceCenterPincodes.js";
 import ProductMasterFactory from "./ProductMaster.js";
+import TechnicianSpareReturnFactory from "./TechnicianSpareReturn.js";
+import TechnicianSpareReturnItemFactory from "./TechnicianSpareReturnItem.js";
 import { sequelize } from "../db.js";
 import dotenv from "dotenv";
 
 dotenv.config();
 
-let Customer, Product, ProductMaster, Users, State, City, CityTierMaster, Pincode, ProductGroup, ProductModel, SparePart, SparePartMSL, SpareRequest, SpareRequestItem, Roles, AccessControl, Dealers, ReportingAuthority, Zones, Plant, RSM, CustomersProducts, Status, SubStatus, Calls, CallSpareUsage, Attachments, AttachmentAccess, HappyCodes, TATTracking, TATHolds, ActionLog, Approvals, SpareInventory, StockMovement, Cartons, GoodsMovementItems, ServiceCenter, Technicians, CallTechnicianAssignment, CallCancellationRequests, LogisticsDocuments, LogisticsDocumentItems, ServiceInvoice, ServiceInvoiceItem, DefectMaster, DefectSpares, ModelDefects, EntityChangeRequests, Ledger, Replacements, Reimbursement, RSMStateMapping, SAPDocuments, SAPDocumentItems, ServiceCenterFinancial, ServiceCenterPincodes;
+let Customer, Product, ProductMaster, Users, State, City, CityTierMaster, Pincode, ProductGroup, ProductModel, SparePart, SparePartMSL, SpareRequest, SpareRequestItem, Roles, AccessControl, Dealers, ReportingAuthority, Zones, Plant, RSM, CustomersProducts, Status, SubStatus, Calls, CallSpareUsage, Attachments, AttachmentAccess, HappyCodes, TATTracking, TATHolds, ActionLog, Approvals, SpareInventory, StockMovement, Cartons, GoodsMovementItems, ServiceCenter, Technicians, CallTechnicianAssignment, CallCancellationRequests, LogisticsDocuments, LogisticsDocumentItems, ServiceInvoice, ServiceInvoiceItem, DefectMaster, DefectSpares, ModelDefects, EntityChangeRequests, Ledger, Replacements, Reimbursement, RSMStateMapping, SAPDocuments, SAPDocumentItems, ServiceCenterFinancial, ServiceCenterPincodes, TechnicianSpareReturn, TechnicianSpareReturnItem;
 
 try {
   console.log("Loading Customer model...");
@@ -527,6 +529,94 @@ try {
   console.error("Failed to load ServiceCenterPincodes model:", err.message);
 }
 
+try {
+  console.log("Loading TechnicianSpareReturn model...");
+  TechnicianSpareReturn = TechnicianSpareReturnFactory(sequelize, DataTypes);
+  console.log("TechnicianSpareReturn model loaded");
+} catch (err) {
+  console.error("Failed to load TechnicianSpareReturn model:", err.message);
+}
+
+try {
+  console.log("Loading TechnicianSpareReturnItem model...");
+  TechnicianSpareReturnItem = TechnicianSpareReturnItemFactory(sequelize, DataTypes);
+  console.log("TechnicianSpareReturnItem model loaded");
+} catch (err) {
+  console.error("Failed to load TechnicianSpareReturnItem model:", err.message);
+}
+
+// --- REGISTER ALL MODELS IN sequelize.models ---
+console.log("📝 Registering models in sequelize.models...");
+const modelsToRegister = {
+  Customer,
+  ProductMaster,
+  Users,
+  State,
+  City,
+  CityTierMaster,
+  Pincode,
+  ProductGroup,
+  ProductModel,
+  SparePart,
+  SparePartMSL,
+  SpareRequest,
+  SpareRequestItem,
+  Roles,
+  AccessControl,
+  Dealers,
+  ReportingAuthority,
+  Zones,
+  Plant,
+  RSM,
+  CustomersProducts,
+  Status,
+  SubStatus,
+  Calls,
+  CallSpareUsage,
+  Attachments,
+  AttachmentAccess,
+  HappyCodes,
+  TATTracking,
+  TATHolds,
+  ActionLog,
+  Approvals,
+  SpareInventory,
+  StockMovement,
+  Cartons,
+  GoodsMovementItems,
+  ServiceCenter,
+  Technicians,
+  CallTechnicianAssignment,
+  CallCancellationRequests,
+  LogisticsDocuments,
+  LogisticsDocumentItems,
+  ServiceInvoice,
+  ServiceInvoiceItem,
+  DefectMaster,
+  DefectSpares,
+  ModelDefects,
+  EntityChangeRequests,
+  Ledger,
+  Replacements,
+  Reimbursement,
+  RSMStateMapping,
+  SAPDocuments,
+  SAPDocumentItems,
+  ServiceCenterFinancial,
+  ServiceCenterPincodes,
+  TechnicianSpareReturn,
+  TechnicianSpareReturnItem
+};
+
+let registeredCount = 0;
+for (const [name, model] of Object.entries(modelsToRegister)) {
+  if (model) {
+    sequelize.models[name] = model;
+    registeredCount++;
+  }
+}
+console.log(`✅ Registered ${registeredCount} models in sequelize.models`);
+
 // --- NOW Define associations (after all models are loaded) ---
 try {
   if (CustomersProducts && ProductMaster) {
@@ -693,6 +783,22 @@ try {
     Status.hasMany(Calls, {
       foreignKey: 'status_id',
       as: 'complaints',
+      constraints: false,
+    });
+  }
+
+  if (Calls && SubStatus) {
+    // Calls belongs to SubStatus
+    Calls.belongsTo(SubStatus, {
+      foreignKey: 'sub_status_id',
+      as: 'subStatus',
+      constraints: false,
+    });
+
+    // SubStatus has many Calls
+    SubStatus.hasMany(Calls, {
+      foreignKey: 'sub_status_id',
+      as: 'calls',
       constraints: false,
     });
   }
@@ -916,6 +1022,17 @@ try {
     });
   }
 
+  // CallSpareUsage - SparePart Association
+  if (CallSpareUsage && SparePart) {
+    // CallSpareUsage belongs to SparePart
+    CallSpareUsage.belongsTo(SparePart, {
+      foreignKey: 'spare_part_id',
+      targetKey: 'Id',
+      as: 'SparePart',
+      constraints: false,
+    });
+  }
+
   // LogisticsDocuments - LogisticsDocumentItems Association
   if (LogisticsDocuments && LogisticsDocumentItems) {
     // LogisticsDocumentItems belongs to LogisticsDocuments
@@ -1010,7 +1127,68 @@ try {
     });
   }
 
-  console.log('✅ Associations defined: CustomersProducts <-> ProductMaster/ProductModel/Customer; Calls <-> Customer/ServiceCenter/Status/CustomersProducts/Technicians; ServiceCenterPincodes <-> ServiceCenter; Technicians <-> ServiceCenter; ProductGroup <-> ProductMaster <-> ProductModel <-> SparePart; SpareRequest <-> SpareRequestItem; SpareRequestItem <-> SparePart; LogisticsDocuments <-> LogisticsDocumentItems; StockMovement <-> GoodsMovementItems/Cartons; Cartons <-> GoodsMovementItems; GoodsMovementItems <-> SparePart');
+  // TechnicianSpareReturn - TechnicianSpareReturnItem Association
+  if (TechnicianSpareReturn && TechnicianSpareReturnItem) {
+    // TechnicianSpareReturnItem belongs to TechnicianSpareReturn
+    TechnicianSpareReturnItem.belongsTo(TechnicianSpareReturn, {
+      foreignKey: 'return_id',
+      targetKey: 'return_id',
+      as: 'return',
+    });
+
+    // TechnicianSpareReturn has many TechnicianSpareReturnItems
+    TechnicianSpareReturn.hasMany(TechnicianSpareReturnItem, {
+      foreignKey: 'return_id',
+      sourceKey: 'return_id',
+      as: 'items',
+    });
+  }
+
+  // TechnicianSpareReturnItem - SparePart Association
+  if (TechnicianSpareReturnItem && SparePart) {
+    // TechnicianSpareReturnItem belongs to SparePart
+    TechnicianSpareReturnItem.belongsTo(SparePart, {
+      foreignKey: 'spare_id',
+      targetKey: 'Id',
+      as: 'spare',
+    });
+  }
+
+  // TechnicianSpareReturn - Technicians Association
+  if (TechnicianSpareReturn && Technicians) {
+    // TechnicianSpareReturn belongs to Technicians
+    TechnicianSpareReturn.belongsTo(Technicians, {
+      foreignKey: 'technician_id',
+      targetKey: 'technician_id',
+      as: 'technician',
+    });
+
+    // Technicians has many TechnicianSpareReturns
+    Technicians.hasMany(TechnicianSpareReturn, {
+      foreignKey: 'technician_id',
+      sourceKey: 'technician_id',
+      as: 'spareReturns',
+    });
+  }
+
+  // TechnicianSpareReturn - ServiceCenter Association
+  if (TechnicianSpareReturn && ServiceCenter) {
+    // TechnicianSpareReturn belongs to ServiceCenter
+    TechnicianSpareReturn.belongsTo(ServiceCenter, {
+      foreignKey: 'service_center_id',
+      targetKey: 'asc_id',
+      as: 'serviceCenter',
+    });
+
+    // ServiceCenter has many TechnicianSpareReturns
+    ServiceCenter.hasMany(TechnicianSpareReturn, {
+      foreignKey: 'service_center_id',
+      sourceKey: 'asc_id',
+      as: 'technicianSpareReturns',
+    });
+  }
+
+  console.log('✅ Associations defined: CustomersProducts <-> ProductMaster/ProductModel/Customer; Calls <-> Customer/ServiceCenter/Status/CustomersProducts/Technicians; ServiceCenterPincodes <-> ServiceCenter; Technicians <-> ServiceCenter; ProductGroup <-> ProductMaster <-> ProductModel <-> SparePart; SpareRequest <-> SpareRequestItem; SpareRequestItem <-> SparePart; LogisticsDocuments <-> LogisticsDocumentItems; StockMovement <-> GoodsMovementItems/Cartons; Cartons <-> GoodsMovementItems; GoodsMovementItems <-> SparePart; TechnicianSpareReturn <-> TechnicianSpareReturnItem <-> SparePart/Technicians/ServiceCenter');
 } catch (assocErr) {
   console.error('Failed to define associations:', assocErr && assocErr.message);
 }
@@ -1091,6 +1269,8 @@ export {
   SAPDocumentItems,
   ServiceCenterFinancial,
   ServiceCenterPincodes,
+  TechnicianSpareReturn,
+  TechnicianSpareReturnItem,
   // OrderRequest,
 };
 

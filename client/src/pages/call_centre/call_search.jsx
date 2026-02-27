@@ -60,7 +60,7 @@ export default function CallSearch() {
 
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch('http://localhost:5000/api/complaints', {
+      const response = await fetch(getApiUrl('/complaints'), {
         headers: {
           Authorization: `Bearer ${token}`
         }

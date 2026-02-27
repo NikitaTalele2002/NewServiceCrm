@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import LocationSelector from '../../components/LocationSelector';
+import { getApiUrl } from '../../config/apiConfig';
 
 export default function CustomerSearchForm({ onCustomerFound, onNewCustomer, onNotFound, loading }) {
   const [searchForm, setSearchForm] = useState({
@@ -44,7 +45,7 @@ export default function CustomerSearchForm({ onCustomerFound, onNewCustomer, onN
         console.log('🔍 Searching customer by mobile:', cleanPhone);
         
         try {
-          const res = await fetch(`http://localhost:5000/api/call-center/customer/${cleanPhone}`);
+          const res = await fetch(getApiUrl(`/call-center/customer/${cleanPhone}`));
 
           // If backend returned non-OK, log and continue to fallback search
           if (!res.ok) {
@@ -84,7 +85,7 @@ export default function CustomerSearchForm({ onCustomerFound, onNewCustomer, onN
 
       console.log('🔍 Multi-criteria search with:', payload);
 
-      const res = await fetch('http://localhost:5000/api/customers/search', {
+      const res = await fetch(getApiUrl('/customers/search'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),

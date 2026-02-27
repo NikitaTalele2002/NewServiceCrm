@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { getApiUrl } from '../../../config/apiConfig';
 
 export default function OrderRequestCreate({ onBack, onSubmit }) {
   const [formData, setFormData] = useState({
@@ -25,7 +26,7 @@ export default function OrderRequestCreate({ onBack, onSubmit }) {
   const fetchProductGroups = async () => {
     try {
       setLoading(true);
-      const response = await fetch('/api/products/hierarchy');
+      const response = await fetch(getApiUrl('/products/hierarchy'));
       
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
@@ -81,7 +82,7 @@ export default function OrderRequestCreate({ onBack, onSubmit }) {
     const fetchSpareParts = async () => {
       try {
         setLoading(true);
-        const response = await fetch(`/api/products/models/${formData.model}/spares`);
+        const response = await fetch(getApiUrl(`/products/models/${formData.model}/spares`));
         if (!response.ok) {
           console.error('Failed to fetch spare parts:', response.status);
           setSpareParts([]);
@@ -163,7 +164,7 @@ export default function OrderRequestCreate({ onBack, onSubmit }) {
 
       console.log('📤 Submitting order request with payload:', payload);
 
-      const response = await fetch('/api/spare-requests', {
+      const response = await fetch(getApiUrl('/spare-requests'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

@@ -1,4 +1,6 @@
-const API_BASE = 'http://localhost:5000/api';
+import { getApiUrl } from '../config/apiConfig';
+
+const API_BASE = getApiUrl('');
 
 // Get auth headers from localStorage token
 const getAuthHeaders = () => {

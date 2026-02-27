@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react';
-import { createComplaintApi, searchComplaintsApi, getComplaintByIdApi, updateComplaintApi, getComplaintsApi, assignTechnicianApi } from '../services/complaintsService';
+import { createComplaintApi, searchComplaintsApi, getComplaintByIdApi, updateComplaintApi, getComplaintsApi, assignTechnicianApi, getAllocationHistoryApi } from '../services/complaintsService';
 
 /**
  * Custom hook for complaint management operations
@@ -187,25 +187,36 @@ export const useComplaints = () => {
    * @async
    * @param {number} complaintId - Complaint ID
    * @param {number} technicianId - Technician ID to assign
-   * @param {boolean} [force=false] - Force assignment if already assigned
+   * @param {string} [assignmentReason=null] - Reason for assignment (INITIAL_ALLOCATION, REALLOCATION, etc)
    * @returns {Promise<{success: boolean, data?: Object, error?: string}>}
    */
-  const assignTechnician = useCallback(async (complaintId, technicianId, force = false) => {
+  const assignTechnician = useCallback(async (complaintId, technicianId, assignmentReason = null) => {
     setLoading(true);
     setError(null);
     try {
-      const result = await assignTechnicianApi(complaintId, technicianId, force);
+      const result = await assignTechnicianApi(complaintId, technicianId, assignmentReason);
       
-      // Immediately update the complaint in the local state with technician info
-      if (result && result.assignedTechnicianName) {
+      // Handle both old and new response formats
+      const technicianData = result.data || result;
+      const assignedTechnicianId = technicianData.assignedTechnicianId || result.assignedTechnicianId;
+      const assignedTechnicianName = technicianData.assignedTechnicianName || result.assignedTechnicianName;
+      const status = technicianData.status || result.status;
+      const statusId = technicianData.statusId || result.statusId;
+      const isReallocation = technicianData.isReallocation || result.isReallocation || false;
+      
+      // Immediately update the complaint in the local state with technician info and status
+      if (assignedTechnicianName) {
         setComplaints(prevComplaints =>
           prevComplaints.map(c => 
-            c.ComplaintId === complaintId || c.call_id === complaintId
+            (c.ComplaintId === complaintId || c.call_id === complaintId) && assignedTechnicianId
               ? {
                   ...c,
-                  AssignedTechnicianId: result.assignedTechnicianId,
-                  TechnicianName: result.assignedTechnicianName,
-                  AssignedTechnicianName: result.assignedTechnicianName
+                  AssignedTechnicianId: assignedTechnicianId,
+                  TechnicianName: assignedTechnicianName,
+                  AssignedTechnicianName: assignedTechnicianName,
+                  status_id: statusId,
+                  status_name: status,
+                  isReallocation: isReallocation
                 }
               : c
           )
@@ -222,6 +233,28 @@ export const useComplaints = () => {
     }
   }, []);
 
+  /**
+   * Get allocation history for a complaint
+   * 
+   * @async
+   * @param {number} complaintId - Complaint ID
+   * @returns {Promise<{success: boolean, data?: Object, error?: string}>}
+   */
+  const getAllocationHistory = useCallback(async (complaintId) => {
+    setLoading(true);
+    setError(null);
+    try {
+      const result = await getAllocationHistoryApi(complaintId);
+      return { success: true, data: result };
+    } catch (err) {
+      const errorMessage = err.message || 'Failed to fetch allocation history';
+      setError(errorMessage);
+      return { success: false, error: errorMessage };
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
   return {
     complaints,
     loading,
@@ -231,6 +264,7 @@ export const useComplaints = () => {
     getComplaintById,
     updateComplaint,
     getComplaints,
-    assignTechnician
+    assignTechnician,
+    getAllocationHistory
   };
 };

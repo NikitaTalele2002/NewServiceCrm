@@ -152,7 +152,8 @@ router.get('/current-inventory', authenticateToken, async (req, res) => {
       }
 
       // Get user selection: location_type and location_id
-      let selectedLocationType = req.query.location_type || req.body?.location_type || 'branch';
+      // For RSM users viewing plant inventory from their assigned plants, use location_type='plant'
+      let selectedLocationType = req.query.location_type || req.body?.location_type || 'plant';
       let selectedLocationId = req.query.location_id || req.body?.location_id;
       
       console.log('[DEBUG] User selected - location_type:', selectedLocationType, 'location_id:', selectedLocationId);

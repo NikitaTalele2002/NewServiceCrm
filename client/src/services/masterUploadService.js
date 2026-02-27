@@ -2,7 +2,9 @@
  * Service for uploading master data files
  */
 
-const API_BASE = 'http://localhost:5000/api';
+import { getApiUrl } from '../config/apiConfig';
+
+const API_BASE = getApiUrl('');
 
 export const uploadMasterDataFile = async (type, file) => {
   try {

@@ -7,79 +7,80 @@ import Loader from "./components/Loader";
 import Sidebar from "./components/Sidebar";
 
 // User Management Pages
-import Login from "./pages/user_management/login";
-import Signup from "./pages/user_management/signup";
-import ForgotPwd from "./pages/user_management/forgot_pwd";
+import Login from "./pages/user_management/login.jsx";
+import Signup from "./pages/user_management/signup.jsx";
+import ForgotPwd from "./pages/user_management/forgot_pwd.jsx";
 
 // Call Centre Pages
 import CallCenterLayout from "./components/CallCenterLayout";
-import SearchForm from "./pages/call_centre/SearchForm";
-import CustomerCard from "./pages/call_centre/CustomerCard";
-import AddCustomerForm from "./pages/call_centre/AddCustomerForm";
-import ComplaintForm from "./pages/call_centre/ComplaintForm";
-import CallUpdate from "./pages/call_centre/CallUpdate";
-import RegisterProduct from "./pages/call_centre/RegisterProduct";
-import ShowProducts from "./pages/call_centre/ShowProducts";
-import ProductDetailsPage from "./pages/call_centre/ProductDetailsPage";
-import ServiceRegistration from "./pages/call_centre/ServiceRegistration";
-import CallCenterDashboardLayout from "./pages/call_centre/callCentreDashboardLayout";
+import SearchForm from "./pages/call_centre/SearchForm.jsx";
+import CustomerCard from "./pages/call_centre/CustomerCard.jsx";
+import AddCustomerForm from "./pages/call_centre/AddCustomerForm.jsx";
+import ComplaintForm from "./pages/call_centre/ComplaintForm.jsx";
+import CallUpdate from "./pages/call_centre/CallUpdate.jsx";
+import RegisterProduct from "./pages/call_centre/RegisterProduct.jsx";
+import ShowProducts from "./pages/call_centre/ShowProducts.jsx";
+import ProductDetailsPage from "./pages/call_centre/ProductDetailsPage.jsx";
+import ServiceRegistration from "./pages/call_centre/ServiceRegistration.jsx";
+import CallCenterDashboardLayout from "./pages/call_centre/callCentreDashboardLayout.jsx";
 
 // Service Center Pages
-import DashboardSC from "./pages/service_center/dashboardSC";
-import Technicians from "./pages/service_center/technicians/technicians";
-import AddTechnician from "./pages/service_center/AddTechnicianRequest";
-import ViewTechnician from "./pages/service_center/ManageTechnicians";
-import ViewComplaints from "./pages/service_center/complaints/viewComplaints";
-import AssignComplaint from "./pages/service_center/complaints/assignComplaint";
-import PincodeMasters from "./pages/service_center/complaints/PincodeMasters";
-import PrintChallan from "./pages/service_center/PrintChallan";
-import RentalAllocation from "./pages/service_center/RentalAllocation";
-import RentalReturn from "./pages/service_center/inventory_management/rental_return";
-import OrderRequest from "./pages/service_center/inventory_management/order_request";
-import ConfirmRequest from "./pages/service_center/inventory_management/confirm_request";
-import SparePartReturn from "./pages/service_center/inventory_management/spare_part_return";
-import GenerateDCF from "./pages/service_center/inventory_management/generate_DCF";
-import TechnicianInventory from "./pages/service_center/inventory_management/technician_inventory";
-import DCFStatus from "./pages/service_center/DCFStatus";
-import DCFDetails from "./pages/service_center/DCFDetails";
+import DashboardSC from "./pages/service_center/dashboardSC.jsx";
+import Technicians from "./pages/service_center/technicians/technicians.jsx";
+import AddTechnician from "./pages/service_center/AddTechnicianRequest.jsx";
+import ViewTechnician from "./pages/service_center/ManageTechnicians.jsx";
+import ViewComplaints from "./pages/service_center/complaints/viewComplaints.jsx";
+import AssignComplaint from "./pages/service_center/complaints/assignComplaint.jsx";
+import PincodeMasters from "./pages/service_center/complaints/PincodeMasters.jsx";
+import PrintChallan from "./pages/service_center/PrintChallan.jsx";
+import RentalAllocation from "./pages/service_center/RentalAllocation.jsx";
+import RentalReturn from "./pages/service_center/inventory_management/rental_return.jsx";
+import OrderRequest from "./pages/service_center/inventory_management/order_request.jsx";
+import ConfirmRequest from "./pages/service_center/inventory_management/confirm_request.jsx";
+import SparePartReturn from "./pages/service_center/inventory_management/spare_part_return.jsx";
+import GenerateDCF from "./pages/service_center/inventory_management/generate_DCF.jsx";
+import TechnicianInventory from "./pages/service_center/inventory_management/technician_inventory.jsx";
+import DCFStatus from "./pages/service_center/DCFStatus.jsx";
+import DCFDetails from "./pages/service_center/DCFDetails.jsx";
 import SpareReturnRequests from "./components/SpareReturnRequests";
-import Dashboard from "./pages/service_center/monthly_claims/Dashboard";
-import SubmitClaim from "./pages/service_center/monthly_claims/SubmitClaim";
-import SetReplacement from "./pages/service_center/product_replacement/set_replacement";
-import ViewReplacementHistory from "./pages/service_center/product_replacement/view_replacement_history";
-import DashboardLayout from "./pages/service_center/serviceCenterLayout";
-import ServiceCenterDashboard from "./pages/service_center/ServiceCenterDashboard";
+import Dashboard from "./pages/service_center/monthly_claims/Dashboard.jsx";
+import SubmitClaim from "./pages/service_center/monthly_claims/SubmitClaim.jsx";
+import SetReplacement from "./pages/service_center/product_replacement/set_replacement.jsx";
+import ViewReplacementHistory from "./pages/service_center/product_replacement/view_replacement_history.jsx";
+import DashboardLayout from "./pages/service_center/serviceCenterLayout.jsx";
+import ServiceCenterDashboard from "./pages/service_center/ServiceCenterDashboard.jsx";
 import { CurrentInventory as BranchCurrentInventory } from "./pages/branch";
-import TechnicianCurrentInventory from "./pages/service_center/TechnicianCurrentInventory";
+import TechnicianCurrentInventory from "./pages/service_center/TechnicianCurrentInventory.jsx";
 import { TechnicianInventoryView } from "./components/technicians";
 
 // Spare Part Return Request Pages
-import SparePartReturnRequest from "./pages/service_center/inventory_management/SparePartReturnRequest";
-import ViewCart from "./pages/service_center/inventory_management/ViewCart";
-import ReturnCart from "./pages/service_center/inventory_management/ReturnCart";
-import PrintReturnChallan from "./pages/service_center/inventory_management/PrintReturnChallan";
-import ViewSpareReturnRequest from "./pages/service_center/inventory_management/ViewSpareReturnRequest";
-import RSMReturnApproval from "./pages/rsm/RSMReturnApproval";
+import SparePartReturnRequest from "./pages/service_center/inventory_management/SparePartReturnRequest.jsx";
+import ViewCart from "./pages/service_center/inventory_management/ViewCart.jsx";
+import ReturnCart from "./pages/service_center/inventory_management/ReturnCart.jsx";
+import PrintReturnChallan from "./pages/service_center/inventory_management/PrintReturnChallan.jsx";
+import ViewSpareReturnRequest from "./pages/service_center/inventory_management/ViewSpareReturnRequest.jsx";
+import RSMReturnApproval from "./pages/rsm/RSMReturnApproval.jsx";
+import CancellationRequestApproval from "./pages/rsm/CancellationRequestApproval.jsx";
 
 // Branch Pages
-import RsmCurrentInventory from "./pages/rsm/RsmCurrentInventory";
-import RsmOrderRequestsPage from "./pages/rsm/RsmOrderRequestsPage";
-import BranchReturnRequests from "./pages/branch/return_requests";
-import BranchDashboard from "./pages/branch/Dashboard";
-import SpareRequests from "./pages/branch/SpareRequests";
-import BranchInventory from "./pages/branch/Inventory";
-import StockAdjust from "./pages/branch/StockAdjust";
-import BranchPrintChallan from "./pages/branch/PrintChallan";
-import BranchDCFStatus from "./pages/branch/DCFStatus";
-import BranchDCFDetails from "./pages/branch/DCFDetails";
-import ApproveTechnicianRequests from "./pages/branch/ApproveTechnicianRequests";
+import RsmCurrentInventory from "./pages/rsm/RsmCurrentInventory.jsx";
+import RsmOrderRequestsPage from "./pages/rsm/RsmOrderRequestsPage.jsx";
+import BranchReturnRequests from "./pages/branch/return_requests.jsx";
+import BranchDashboard from "./pages/branch/Dashboard.jsx";
+import SpareRequests from "./pages/branch/SpareRequests.jsx";
+import BranchInventory from "./pages/branch/Inventory.jsx";
+import StockAdjust from "./pages/branch/StockAdjust.jsx";
+import BranchPrintChallan from "./pages/branch/PrintChallan.jsx";
+import BranchDCFStatus from "./pages/branch/DCFStatus.jsx";
+import BranchDCFDetails from "./pages/branch/DCFDetails.jsx";
+import ApproveTechnicianRequests from "./pages/branch/ApproveTechnicianRequests.jsx";
 
 // Admin Pages
-import MasterUpload from "./pages/admin/MasterUpload";
-import CodeManagement from "./pages/admin/CodeManagement";
+import MasterUpload from "./pages/admin/MasterUpload.jsx";
+import CodeManagement from "./pages/admin/CodeManagement.jsx";
 
 // Home & Other Pages
-import Home from "./pages/Home";
+import Home from "./pages/Home.jsx";
 
 // ========== LOGIN SUCCESS MESSAGE COMPONENT ==========
 function LoginSuccessMessage() {
@@ -326,6 +327,8 @@ function AppRoutes() {
             } />
             {/* RSM Order Requests route */}
             <Route path="rsm-order-requests" element={<ProtectedRoute allowedRoles={["rsm"]}><RsmOrderRequestsPage /></ProtectedRoute>} />
+            {/* RSM Cancellation Request Approvals route */}
+            <Route path="cancellation-approvals" element={<ProtectedRoute allowedRoles={["rsm"]}><CancellationRequestApproval /></ProtectedRoute>} />
                         <Route path="rsm-current-inventory" element={<RsmCurrentInventory />} />
             <Route path="stock-adjust" element={<StockAdjust />} />
             <Route path="print-challan" element={<BranchPrintChallan />} />

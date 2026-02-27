@@ -1,0 +1,307 @@
+{
+  "info": {
+    "_postman_id": "spare-return-collection-001",
+    "name": "Technician Spare Return APIs",
+    "description": "Complete API collection for testing spare return workflow",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "1. Get All Technician Returns",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{TECH_TOKEN}}",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{SERVER_URL}}/api/technician-spare-returns",
+          "host": [
+            "{{SERVER_URL}}"
+          ],
+          "path": [
+            "api",
+            "technician-spare-returns"
+          ]
+        },
+        "description": "Get all spare return requests for logged-in technician"
+      },
+      "response": []
+    },
+    {
+      "name": "2. Get Specific Return Details",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{TECH_TOKEN}}",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{SERVER_URL}}/api/technician-spare-returns/102",
+          "host": [
+            "{{SERVER_URL}}"
+          ],
+          "path": [
+            "api",
+            "technician-spare-returns",
+            "102"
+          ]
+        },
+        "description": "Get details of a specific return request with all items"
+      },
+      "response": []
+    },
+    {
+      "name": "3. Create New Return Request",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{TECH_TOKEN}}",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"serviceCenterId\": 1,\n  \"callId\": 1005,\n  \"remarks\": \"Defective spare collected from customer visit\",\n  \"items\": [\n    {\n      \"spareId\": 1,\n      \"itemType\": \"defective\",\n      \"requestedQty\": 1,\n      \"defectReason\": \"Motor not running\",\n      \"remarks\": \"Failure after 3 days\"\n    },\n    {\n      \"spareId\": 2,\n      \"itemType\": \"unused\",\n      \"requestedQty\": 2,\n      \"remarks\": \"Over-allocated, not needed\"\n    }\n  ]\n}\n"
+        },
+        "url": {
+          "raw": "{{SERVER_URL}}/api/technician-spare-returns/create",
+          "host": [
+            "{{SERVER_URL}}"
+          ],
+          "path": [
+            "api",
+            "technician-spare-returns",
+            "create"
+          ]
+        },
+        "description": "Create a new spare return request (technician)"
+      },
+      "response": []
+    },
+    {
+      "name": "4. SC Views Returns",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{SC_TOKEN}}",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{SERVER_URL}}/api/returns/technician-spare-returns/list?serviceCenterId=1&status=submitted",
+          "host": [
+            "{{SERVER_URL}}"
+          ],
+          "path": [
+            "api",
+            "returns",
+            "technician-spare-returns",
+            "list"
+          ],
+          "query": [
+            {
+              "key": "serviceCenterId",
+              "value": "1"
+            },
+            {
+              "key": "status",
+              "value": "submitted",
+              "description": "submitted | received | verified | all"
+            }
+          ]
+        },
+        "description": "Service Center views technician spare returns"
+      },
+      "response": []
+    },
+    {
+      "name": "5. SC Views Return Items",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{SC_TOKEN}}",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{SERVER_URL}}/api/returns/technician-spare-returns/102/items",
+          "host": [
+            "{{SERVER_URL}}"
+          ],
+          "path": [
+            "api",
+            "returns",
+            "technician-spare-returns",
+            "102",
+            "items"
+          ]
+        },
+        "description": "Get items for a specific return request"
+      },
+      "response": []
+    },
+    {
+      "name": "6. SC Receives Items",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{SC_TOKEN}}",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"userId\": 15,\n  \"items\": [\n    {\n      \"return_item_id\": 201,\n      \"received_qty\": 1\n    },\n    {\n      \"return_item_id\": 202,\n      \"received_qty\": 2\n    }\n  ],\n  \"remarks\": \"All items received in good condition\"\n}\n"
+        },
+        "url": {
+          "raw": "{{SERVER_URL}}/api/technician-spare-returns/102/receive",
+          "host": [
+            "{{SERVER_URL}}"
+          ],
+          "path": [
+            "api",
+            "technician-spare-returns",
+            "102",
+            "receive"
+          ]
+        },
+        "description": "Service Center receives spare items and updates status to RECEIVED"
+      },
+      "response": []
+    },
+    {
+      "name": "7. SC Verifies Return (Updates Inventory)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{SC_TOKEN}}",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"userId\": 15,\n  \"items\": [\n    {\n      \"return_item_id\": 201,\n      \"verified_qty\": 1,\n      \"condition_on_receipt\": \"good\"\n    },\n    {\n      \"return_item_id\": 202,\n      \"verified_qty\": 2,\n      \"condition_on_receipt\": \"good\"\n    }\n  ],\n  \"remarks\": \"All items verified and added to inventory\"\n}\n"
+        },
+        "url": {
+          "raw": "{{SERVER_URL}}/api/technician-spare-returns/102/verify",
+          "host": [
+            "{{SERVER_URL}}"
+          ],
+          "path": [
+            "api",
+            "technician-spare-returns",
+            "102",
+            "verify"
+          ]
+        },
+        "description": "Service Center verifies return, updates inventory, and marks as VERIFIED"
+      },
+      "response": []
+    },
+    {
+      "name": "8. Cancel Return",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{TECH_TOKEN}}",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"remarks\": \"Wrong spare was added, will resubmit\"\n}\n"
+        },
+        "url": {
+          "raw": "{{SERVER_URL}}/api/technician-spare-returns/101/cancel",
+          "host": [
+            "{{SERVER_URL}}"
+          ],
+          "path": [
+            "api",
+            "technician-spare-returns",
+            "101",
+            "cancel"
+          ]
+        },
+        "description": "Cancel a return request (only for DRAFT or SUBMITTED status)"
+      },
+      "response": []
+    }
+  ],
+  "variable": [
+    {
+      "key": "SERVER_URL",
+      "value": "http://localhost:5000",
+      "type": "string"
+    },
+    {
+      "key": "TECH_TOKEN",
+      "value": "YOUR_TECHNICIAN_TOKEN_HERE",
+      "type": "string"
+    },
+    {
+      "key": "SC_TOKEN",
+      "value": "YOUR_SERVICE_CENTER_TOKEN_HERE",
+      "type": "string"
+    }
+  ]
+}

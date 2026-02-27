@@ -145,7 +145,7 @@ export default (sequelize) => {
         type: DataTypes.DATE,
         defaultValue: DataTypes.NOW,
         field: 'updated_at',
-      },
+      }
     },
     {
       tableName: 'stock_movement',
@@ -154,4 +154,6 @@ export default (sequelize) => {
   );
 
   return StockMovement;
+
+
 };

@@ -1,5 +1,6 @@
 // src/context/MasterDataContext.jsx
 import React, { createContext, useContext, useEffect, useState } from "react";
+import { getApiUrl } from '../config/apiConfig';
 
 const MasterDataContext = createContext();
 
@@ -10,7 +11,7 @@ export function MasterDataProvider({ children }) {
 
   async function fetchStates() {
     try {
-      const res = await fetch("http://localhost:5000/api/admin/master-data?type=state");
+      const res = await fetch(getApiUrl('/admin/master-data?type=state'));
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const js = await res.json();
       setStates(js.rows || []);
@@ -22,7 +23,7 @@ export function MasterDataProvider({ children }) {
 
   async function fetchCities() {
     try {
-      const res = await fetch("http://localhost:5000/api/admin/master-data?type=city");
+      const res = await fetch(getApiUrl('/admin/master-data?type=city'));
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const js = await res.json();
       setCities(js.rows || []);
@@ -34,7 +35,7 @@ export function MasterDataProvider({ children }) {
 
   async function fetchPincodes() {
     try {
-      const res = await fetch("http://localhost:5000/api/admin/master-data?type=pincode");
+      const res = await fetch(getApiUrl('/admin/master-data?type=pincode'));
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const js = await res.json();
       setPincodes(js.rows || []);

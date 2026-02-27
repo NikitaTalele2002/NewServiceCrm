@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { getApiUrl } from "../../../config/apiConfig";
 
 export default function ConfirmRequest() {
   const [productGroups, setProductGroups] = useState([]);
@@ -8,7 +9,7 @@ export default function ConfirmRequest() {
       try {
         const token = localStorage.getItem('token');
         const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
-        const res = await fetch(`http://localhost:5000/api/admin/master-data?type=productgroup`, { headers });
+        const res = await fetch(getApiUrl('/admin/master-data?type=productgroup'), { headers });
         const data = await res.json();
         const rows = Array.isArray(data) ? data : data.rows || data.data || [];
         setProductGroups(rows);
@@ -17,6 +18,8 @@ export default function ConfirmRequest() {
       }
     })();
   }, []);
+
+  
 
   function getPgLabel(pg) {
     if (!pg) return "";
@@ -118,4 +121,3 @@ export default function ConfirmRequest() {
     </div>
   );
 }
-// i have my database on the localhost 

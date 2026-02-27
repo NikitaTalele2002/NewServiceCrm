@@ -82,10 +82,27 @@ export function generateMockSAPData(spareRequest, items) {
     items: dnData.items
   };
 
+  // Generate Invoice (stored in SAPDocuments table)
+  const invoiceNumber = `INV-${dateStr}-${Math.random().toString(36).substr(2, 5).toUpperCase()}`;
+  const invoiceDate = new Date(timestamp.getTime() + 1 * 24 * 60 * 60 * 1000); // 1 day after SO
+  const totalAmount = calculateTotalAmount(soData.items);
+  
+  const invoiceData = {
+    sap_doc_type: 'INVOICE',
+    sap_doc_number: invoiceNumber,
+    module_type: 'spare_request',  // reference_type
+    reference_id: soNumber,  // SO number is the reference document
+    status: 'Posted',
+    amount: totalAmount,
+    document_date: invoiceDate,
+    items: dnData.items
+  };
+
   return {
     salesOrder: soData,
     deliveryNote: dnData,
     challan: challanData,
+    invoice: invoiceData,
     sapIntegrationData: {
       externalSystem: 'SAP_HANA',
       integrationTimestamp: timestamp,
@@ -171,3 +188,62 @@ export function formatSAPDataForDB(sapData, fromEntity, toEntity) {
     transportDetails: sapData.challan.transportDetails
   };
 }
+
+/**
+ * Get invoice from SAPDocuments by request ID
+ * @param {number} requestId - The spare request ID
+ * @param {Object} sequelize - Sequelize instance
+ * @returns {Promise<Object>} - Invoice document or null
+ */
+export async function getInvoiceByRequestId(requestId, sequelize) {
+  try {
+    // Find the SO (Sales Order) first
+    const soDoc = await sequelize.models.LogisticsDocuments.findOne({
+      where: {
+        reference_id: requestId,
+        document_type: 'SO'
+      }
+    });
+
+    if (!soDoc) {
+      return null;
+    }
+
+    // Find invoice by SO reference
+    const invoice = await sequelize.models.SAPDocuments.findOne({
+      where: {
+        reference_id: soDoc.document_number,  // SO number
+        sap_doc_type: 'INVOICE',
+        module_type: 'spare_request'
+      }
+    });
+
+    return invoice ? invoice.toJSON() : null;
+  } catch (error) {
+    console.error('Error fetching invoice:', error.message);
+    return null;
+  }
+}
+
+/**
+ * Get invoice by SO (Sales Order) number
+ * @param {string} soNumber - The Sales Order number
+ * @param {Object} sequelize - Sequelize instance
+ * @returns {Promise<Object>} - Invoice document or null
+ */
+export async function getInvoiceBySONumber(soNumber, sequelize) {
+  try {
+    const invoice = await sequelize.models.SAPDocuments.findOne({
+      where: {
+        reference_id: soNumber,  // SO number is the reference
+        sap_doc_type: 'INVOICE'
+      }
+    });
+
+    return invoice ? invoice.toJSON() : null;
+  } catch (error) {
+    console.error('Error fetching invoice by SO:', error.message);
+    return null;
+  }
+}
+

@@ -15,11 +15,30 @@ async function getLatLng(address) {
   return null;
 }
 
-// Protect service-center routes: only allow authenticated users with role 'service_center'
-router.use(authenticateToken, requireRole('service_center'));
+// GET all service centers - NO AUTHENTICATION REQUIRED for calls view
+router.get("/all", async (req, res) => {
+  try {
+    const pool = await poolPromise;
+    console.log('[ServiceCenter /all] Fetching all service centers...');
+    const result = await pool.request().query("SELECT * FROM [service_centers]");
+    console.log('[ServiceCenter /all] Found', result.recordset?.length || 0, 'service centers');
+    res.json(result.recordset || []);
+  } catch (err) {
+    console.error('[ServiceCenter /all] Error:', err);
+    res.status(500).json({ error: err.message || "Failed to fetch centers" });
+  }
+});
+
+// Apply authentication for all other routes
+router.use(authenticateToken);
 
 router.post("/add", async (req, res) => {
   try {
+    // Require service_center role for adding new centers
+    if (req.user?.role !== 'service_center') {
+      return res.status(403).json({ error: "Only service centers can add new centers" });
+    }
+    
     const { CenterName, Address, City, State, PinCode, ContactPerson, Phone } = req.body;
     const full = `${Address}, ${City}, ${State}, ${PinCode}`;
     const loc = await getLatLng(full);
@@ -37,7 +56,7 @@ router.post("/add", async (req, res) => {
       .input("ContactPerson", ContactPerson)
       .input("Phone", Phone)
       .query(`
-        INSERT INTO ServiceCenters (CenterName, Address, City, State, PinCode, Latitude, Longitude, ContactPerson, Phone)
+        INSERT INTO [service_centers] (CenterName, Address, City, State, PinCode, Latitude, Longitude, ContactPerson, Phone)
         VALUES (@CenterName, @Address, @City, @State, @PinCode, @Latitude, @Longitude, @ContactPerson, @Phone)
       `);
 
@@ -45,18 +64,6 @@ router.post("/add", async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: err.message || "Failed to add center" });
-  }
-});
-
-
-router.get("/all", async (req, res) => {
-  try {
-    const pool = await poolPromise;
-    const result = await pool.request().query("SELECT * FROM ServiceCenters");
-    res.json(result.recordset || []);
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Failed to fetch centers" });
   }
 });
 

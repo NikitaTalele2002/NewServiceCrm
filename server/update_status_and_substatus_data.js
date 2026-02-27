@@ -15,19 +15,17 @@ const __dirname = dirname(__filename);
 // Initialize Sequelize
 const sequelize = new Sequelize(
   process.env.DB_NAME || 'NewCRM',
-  process.env.DB_USER || 'sa',
-  process.env.DB_PASSWORD || 'Harsh@1234',
+  process.env.DB_USER || 'crm_user',
+  process.env.DB_PASSWORD || 'StrongPassword123!',
   {
     host: process.env.DB_HOST || 'localhost',
     port: process.env.DB_PORT || 1433,
     dialect: 'mssql',
     dialectOptions: {
-      authentication: {
-        type: 'default',
-        options: {
-          userName: process.env.DB_USER || 'sa',
-          password: process.env.DB_PASSWORD || 'Harsh@1234'
-        }
+      options: {
+        instanceName: 'SQLEXPRESS',
+        encrypt: false,
+        trustServerCertificate: true
       }
     },
     logging: false
@@ -53,9 +51,7 @@ async function updateStatusAndSubStatusData() {
         status_name: 'pending',
         sub_statuses: [
           'pending for spares',
-          'pending for replacement',
-          'pending for rsm approval',
-          'pending for hod approval'
+          'pending for replacement'
         ]
       },
       {
@@ -68,14 +64,6 @@ async function updateStatusAndSubStatusData() {
       {
         status_name: 'cancelled',
         sub_statuses: []
-      },
-      {
-        status_name: 'rejected',
-        sub_statuses: [
-          'rejected by rsm',
-          'rejected by hod',
-          'rejected by asc'
-        ]
       }
     ];
 

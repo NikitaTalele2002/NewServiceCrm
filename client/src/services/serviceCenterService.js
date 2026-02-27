@@ -1,6 +1,8 @@
+import { getApiUrl } from '../config/apiConfig';
+
 export const getServiceCenterInventoryApi = async () => {
   const token = localStorage.getItem('token');
-  const response = await fetch('/api/branch/sc/inventory', {
+  const response = await fetch(getApiUrl('/branch/sc/inventory'), {
     headers: { Authorization: `Bearer ${token}` }
   });
   if (!response.ok) throw new Error('Failed to fetch service center inventory');
@@ -9,7 +11,7 @@ export const getServiceCenterInventoryApi = async () => {
 
 export const getServiceCenterRequestsApi = async () => {
   const token = localStorage.getItem('token');
-  const response = await fetch('/api/branch/sc/requests', {
+  const response = await fetch(getApiUrl('/branch/sc/requests'), {
     headers: { Authorization: `Bearer ${token}` }
   });
   if (!response.ok) throw new Error('Failed to fetch service center requests');
@@ -19,7 +21,7 @@ export const getServiceCenterRequestsApi = async () => {
 
 export const createBranchRequestApi = async (requestData) => {
   const token = localStorage.getItem('token');
-  const response = await fetch('/api/branch/requests/create', {
+  const response = await fetch(getApiUrl('/branch/requests/create'), {
     method: 'POST',
     headers: {
       'Authorization': `Bearer ${token}`,
@@ -33,7 +35,7 @@ export const createBranchRequestApi = async (requestData) => {
 
 export const getTechnicianInventoryApi = async (technicianId) => {
   const token = localStorage.getItem('token');
-  const response = await fetch(`/api/technicians/${technicianId}/inventory`, {
+  const response = await fetch(getApiUrl(`/technicians/${technicianId}/inventory`), {
     headers: { Authorization: `Bearer ${token}` }
   });
   if (!response.ok) throw new Error('Failed to fetch technician inventory');
@@ -43,10 +45,10 @@ export const getTechnicianInventoryApi = async (technicianId) => {
 export const getTechniciansByCentreApi = async (centerId) => {
   const token = localStorage.getItem('token');
   const params = centerId ? `?centerId=${encodeURIComponent(centerId)}` : '';
-  console.log('🔌 Calling technicians API (serviceCenterService):', `/api/technicians/by-centre${params}`);
+  console.log('🔌 Calling technicians API (serviceCenterService):', getApiUrl(`/technicians/by-centre${params}`));
   
   try {
-    const response = await fetch(`/api/technicians/by-centre${params}`, {
+    const response = await fetch(getApiUrl(`/technicians/by-centre${params}`), {
       headers: { Authorization: `Bearer ${token}` }
     });
     

@@ -16,7 +16,23 @@ const sequelize = new Sequelize("NewCRM", "crm_user", "StrongPassword123!", {
   pool: { max: 5, min: 0, idle: 10000 },
 });
 
+// Load models first to register them in sequelize.models
+let modelsLoaded = false;
+const loadModels = async () => {
+  if (!modelsLoaded) {
+    try {
+      await import('./models/index.js');
+      modelsLoaded = true;
+    } catch (err) {
+      console.error('Failed to load models:', err.message);
+    }
+  }
+};
+
 const connectDB = async () => {
+  // Load models before connecting to DB
+  await loadModels();
+  
   try {
     await sequelize.authenticate();
     console.log("Database Connected Successfully");

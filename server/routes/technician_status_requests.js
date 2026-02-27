@@ -3,6 +3,19 @@ const router = express.Router();
 import { sequelize, Technicians, ServiceCenter, Users } from '../models/index.js';
 import { authenticateToken } from '../middleware/auth.js';
 
+// Helper function to safely get centerId from user token (with fallback to database lookup)
+async function getCenterId(userId) {
+  try {
+    const serviceCenter = await ServiceCenter.findOne({
+      where: { user_id: userId },
+      attributes: ['asc_id']
+    });
+    return serviceCenter ? serviceCenter.asc_id : null;
+  } catch (err) {
+    return null;
+  }
+}
+
 // POST /api/technician-status-requests - Service center creates a request to activate/deactivate/add technician
 router.post('/', authenticateToken, async (req, res) => {
   try {
@@ -37,7 +50,8 @@ router.post('/', authenticateToken, async (req, res) => {
 
       // Check if technician belongs to user's service center
       const technician = await Technicians.findByPk(technicianId);
-      if (!technician || technician.ServiceCenterId !== req.user.centerId) {
+      const userCenterId = req.user.centerId || await getCenterId(req.user.id);
+      if (!technician || technician.ServiceCenterId !== userCenterId) {
         return res.status(403).json({ error: 'Technician not found or not authorized' });
       }
 
@@ -127,8 +141,7 @@ router.get('/', authenticateToken, async (req, res) => {
       const enriched = { ...request };
       
       try {
-        // Fetch the requesting user
-        const requester = await Users.findByPk(request.RequestedBy, { raw: true });
+        // Fetch the requesting user        const requester = await Users.findByPk(request.RequestedBy, { raw: true });
         enriched.Requester = requester;
         
         // Fetch the service centre for this user
@@ -276,14 +289,15 @@ router.post('/:id/reject', authenticateToken, async (req, res) => {
 // GET /api/technician-status-requests/technicians - Service center gets their technicians
 router.get('/technicians', authenticateToken, async (req, res) => {
   try {
-    if (!req.user.centerId) {
+    const userCenterId = req.user.centerId || await getCenterId(req.user.id);
+    if (!userCenterId) {
       return res.status(403).json({ error: 'Not a service center user' });
     }
 
     // Fetch approved technicians for this service center
     const technicians = await Technicians.findAll({
       where: {
-        service_center_id: req.user.centerId,
+        service_center_id: userCenterId,
         status: 'active'
       },
       include: [{ model: ServiceCenter, as: 'serviceCenter', attributes: ['asc_name'] }]

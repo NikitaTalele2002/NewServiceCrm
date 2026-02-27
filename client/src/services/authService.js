@@ -1,5 +1,7 @@
+import { getApiUrl } from '../config/apiConfig';
+
 export const loginApi = async (loginData) => {
-  const response = await fetch('/api/auth/login', {
+  const response = await fetch(getApiUrl('/auth/login'), {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json'
@@ -11,7 +13,7 @@ export const loginApi = async (loginData) => {
 };
 
 export const signupApi = async (signupData) => {
-  const response = await fetch('/api/auth/signup', {
+  const response = await fetch(getApiUrl('/auth/signup'), {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json'
@@ -23,7 +25,7 @@ export const signupApi = async (signupData) => {
 };
 
 export const forgotPasswordApi = async (email) => {
-  const response = await fetch('/api/auth/forgot-password', {
+  const response = await fetch(getApiUrl('/auth/forgot-password'), {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json'
@@ -35,7 +37,7 @@ export const forgotPasswordApi = async (email) => {
 };
 
 export const resetPasswordApi = async (resetData) => {
-  const response = await fetch('/api/auth/reset-password', {
+  const response = await fetch(getApiUrl('/auth/reset-password'), {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json'

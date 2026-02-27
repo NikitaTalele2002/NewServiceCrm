@@ -1,6 +1,6 @@
 import express from "express";
 const router = express.Router();
-import { Op } from 'sequelize';
+import { Op, QueryTypes } from 'sequelize';
 import { sequelize, SparePart, ServiceCenterInventory, ProductModel, ProductMaster, ProductGroup, ServiceCentre, SpareRequest, SpareRequestItem } from '../models/index.js';
 import { authenticateToken, optionalAuthenticate } from '../middleware/auth.js';
 
@@ -601,6 +601,124 @@ router.get('/service-center-requests/:id/details', authenticateToken, async (req
   } catch (error) {
     console.error('Error fetching request details:', error);
     res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+/**
+ * GET /api/returns/technician-spare-returns - Get technician spare return requests for rental return page
+ * Service center endpoint to view spare returns submitted by technicians
+ */
+router.get('/technician-spare-returns/list', optionalAuthenticate, async (req, res) => {
+  try {
+    const { serviceCenterId, status = 'submitted' } = req.query;
+
+    if (!serviceCenterId) {
+      return res.status(400).json({ error: 'Service Center ID is required' });
+    }
+
+    console.log(`📋 Fetching technician spare returns for SC ${serviceCenterId} (status: ${status})`);
+
+    // Fetch technician spare return requests for this service center
+    const spareReturns = await sequelize.query(`
+      SELECT 
+        tsr.return_id,
+        tsr.return_number,
+        tsr.call_id,
+        tsr.technician_id,
+        tsr.service_center_id,
+        tsr.return_status,
+        tsr.return_date,
+        tsr.received_date,
+        tsr.verified_date,
+        tsr.remarks,
+        tsr.created_at,
+        t.name as technician_name,
+        t.mobile_no as technician_phone,
+        (SELECT COUNT(*) FROM technician_spare_return_items 
+         WHERE return_id = tsr.return_id AND item_type = 'defective') as defective_count,
+        (SELECT COUNT(*) FROM technician_spare_return_items 
+         WHERE return_id = tsr.return_id AND item_type = 'unused') as unused_count,
+        (SELECT SUM(requested_qty) FROM technician_spare_return_items 
+         WHERE return_id = tsr.return_id AND item_type = 'defective') as defective_qty,
+        (SELECT SUM(requested_qty) FROM technician_spare_return_items 
+         WHERE return_id = tsr.return_id AND item_type = 'unused') as unused_qty
+      FROM technician_spare_returns tsr
+      LEFT JOIN technicians t ON tsr.technician_id = t.technician_id
+      WHERE tsr.service_center_id = ?
+        AND tsr.return_status = ?
+      ORDER BY tsr.created_at DESC
+    `, { 
+      replacements: [serviceCenterId, status],
+      type: QueryTypes.SELECT 
+    });
+
+    console.log(`✅ Found ${spareReturns.length} technician spare returns`);
+
+    res.json({
+      success: true,
+      serviceCenterId,
+      status,
+      data: spareReturns,
+      count: spareReturns.length
+    });
+
+  } catch (error) {
+    console.error('Error fetching technician spare returns:', error);
+    res.status(500).json({ 
+      error: 'Failed to fetch technician spare returns',
+      details: error.message
+    });
+  }
+});
+
+/**
+ * GET /api/returns/technician-spare-returns/:returnId/items - Get items for a technician spare return
+ */
+router.get('/technician-spare-returns/:returnId/items', optionalAuthenticate, async (req, res) => {
+  try {
+    const { returnId } = req.params;
+
+    console.log(`📦 Fetching items for spare return #${returnId}`);
+
+    const items = await sequelize.query(`
+      SELECT 
+        tsri.return_item_id,
+        tsri.return_id,
+        tsri.spare_id,
+        tsri.item_type,
+        tsri.requested_qty,
+        tsri.received_qty,
+        tsri.verified_qty,
+        tsri.defect_reason,
+        tsri.condition_on_receipt,
+        tsri.remarks,
+        sp.PART as spare_code,
+        sp.DESCRIPTION as spare_name,
+        sp.BRAND as spare_brand
+      FROM technician_spare_return_items tsri
+      LEFT JOIN spare_parts sp ON tsri.spare_id = sp.Id
+      WHERE tsri.return_id = ?
+      ORDER BY tsri.item_type DESC, tsri.return_item_id
+    `, { 
+      replacements: [returnId],
+      type: QueryTypes.SELECT 
+    });
+
+    console.log(`✅ Found ${items.length} items`);
+
+    res.json({
+      success: true,
+      returnId,
+      data: items,
+      count: items.length
+    });
+
+  } catch (error) {
+    console.error('Error fetching return items:', error);
+    res.status(500).json({ 
+      error: 'Failed to fetch return items',
+      details: error.message
+    });
   }
 });
 

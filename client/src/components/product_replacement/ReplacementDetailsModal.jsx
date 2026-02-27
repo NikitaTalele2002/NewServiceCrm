@@ -1,5 +1,5 @@
 import React from 'react';
-import CallView from '../../pages/call_centre/CallView';
+import CallView from '../../pages/call_centre/CallView.jsx';
 
 const ReplacementDetailsModal = ({ selectedReplacement, fullReplacement, modalLoading, onClose, onPrint }) => {
   if (!selectedReplacement) return null;

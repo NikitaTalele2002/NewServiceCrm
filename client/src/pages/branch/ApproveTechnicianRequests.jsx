@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { getApiUrl } from '../../config/apiConfig';
 import Button from '../../components/common/Button';
 
 const ApproveTechnicianRequests = () => {
@@ -14,7 +15,7 @@ const ApproveTechnicianRequests = () => {
     setLoading(true);
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch('/api/technician-status-requests', {
+      const response = await fetch(getApiUrl('/technician-status-requests'), {
         headers: { Authorization: `Bearer ${token}` }
       });
       if (!response.ok) throw new Error('Failed to fetch requests');
@@ -31,7 +32,7 @@ const ApproveTechnicianRequests = () => {
   const handleApprove = async (id) => {
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch(`/api/technician-status-requests/${id}/approve`, {
+      const response = await fetch(getApiUrl(`/technician-status-requests/${id}/approve`), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -50,7 +51,7 @@ const ApproveTechnicianRequests = () => {
   const handleReject = async (id) => {
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch(`/api/technician-status-requests/${id}/reject`, {
+      const response = await fetch(getApiUrl(`/technician-status-requests/${id}/reject`), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

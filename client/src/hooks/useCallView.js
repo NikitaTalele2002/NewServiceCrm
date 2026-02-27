@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { callViewService } from '../services/callViewService';
+import { useActionLog } from './useActionLog';
 
 export const useCallView = (call) => {
   const [productGroups, setProductGroups] = useState([]);
@@ -7,9 +8,14 @@ export const useCallView = (call) => {
   const [cities, setCities] = useState([]);
   const [serviceCenterName, setServiceCenterName] = useState('');
   const [technicianName, setTechnicianName] = useState('');
-  const [showActionLogModal, setShowActionLogModal] = useState(false);
-  const [actionLogData, setActionLogData] = useState([]);
-  const [loading, setLoading] = useState(false);
+  
+  const {
+    showActionLogModal,
+    setShowActionLogModal,
+    actionLogData,
+    loading,
+    handleActionLog: fetchActionLogData
+  } = useActionLog();
 
   // Get token from localStorage
   const getToken = () => localStorage.getItem('token');
@@ -113,18 +119,7 @@ export const useCallView = (call) => {
 
   const handleActionLog = async () => {
     if (!call?.ComplaintId) return;
-
-    setLoading(true);
-    try {
-      const token = getToken();
-      const data = await callViewService.fetchActionLog(call.ComplaintId, token);
-      setActionLogData(data);
-      setShowActionLogModal(true);
-    } catch (error) {
-      alert('Error fetching action log');
-    } finally {
-      setLoading(false);
-    }
+    await fetchActionLogData(call.ComplaintId);
   };
 
   return {

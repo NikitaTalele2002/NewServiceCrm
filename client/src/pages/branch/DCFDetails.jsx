@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
+import { getApiUrl } from '../../config/apiConfig';
 
 const BranchDCFDetails = () => {
   const { id } = useParams();
@@ -16,7 +17,7 @@ const BranchDCFDetails = () => {
     setLoading(true);
     try {
       const token = localStorage.getItem('token');
-      const res = await fetch(`/api/returns/branch-requests/${requestId}/details`, {
+      const res = await fetch(getApiUrl(`/returns/branch-requests/${requestId}/details`), {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'

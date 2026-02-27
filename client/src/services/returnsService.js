@@ -1,6 +1,8 @@
+import { getApiUrl } from '../config/apiConfig';
+
 export const getServiceCenterReturnRequestsApi = async () => {
   const token = localStorage.getItem('token');
-  const response = await fetch('/api/returns/service-center-requests', {
+  const response = await fetch(getApiUrl('/returns/service-center-requests'), {
     headers: {
       'Authorization': `Bearer ${token}`,
       'Content-Type': 'application/json'
@@ -12,7 +14,7 @@ export const getServiceCenterReturnRequestsApi = async () => {
 
 export const getReturnRequestDetailsApi = async (requestId) => {
   const token = localStorage.getItem('token');
-  const response = await fetch(`/api/returns/service-center-requests/${requestId}/details`, {
+  const response = await fetch(getApiUrl(`/returns/service-center-requests/${requestId}/details`), {
     headers: {
       'Authorization': `Bearer ${token}`,
       'Content-Type': 'application/json'
@@ -24,7 +26,7 @@ export const getReturnRequestDetailsApi = async (requestId) => {
 
 export const createReturnRequestApi = async (returnData) => {
   const token = localStorage.getItem('token');
-  const response = await fetch('/api/returns/create', {
+  const response = await fetch(getApiUrl('/returns/create'), {
     method: 'POST',
     headers: {
       'Authorization': `Bearer ${token}`,

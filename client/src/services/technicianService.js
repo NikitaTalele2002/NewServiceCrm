@@ -1,7 +1,9 @@
+import { getApiUrl } from '../config/apiConfig';
+
 export const fetchTechniciansApi = async () => {
   const token = localStorage.getItem('token');
 
-  const response = await fetch('/api/technician-status-requests/technicians', {
+  const response = await fetch(getApiUrl('/technician-status-requests/technicians'), {
     headers: { Authorization: `Bearer ${token}` }
   });
 
@@ -12,7 +14,7 @@ export const fetchTechniciansApi = async () => {
 export const addTechnicianRequestApi = async (technicianData) => {
   const token = localStorage.getItem('token');
 
-  const response = await fetch('/api/technician-status-requests', {
+  const response = await fetch(getApiUrl('/technician-status-requests'), {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -34,10 +36,10 @@ export const addTechnicianRequestApi = async (technicianData) => {
 export const getTechniciansByCentreApi = async (centerId) => {
   const token = localStorage.getItem('token');
   const params = centerId ? `?centerId=${encodeURIComponent(centerId)}` : '';
-  console.log('🔌 Calling technicians API:', `/api/technicians/by-centre${params}`);
+  console.log('🔌 Calling technicians API:', getApiUrl(`/technicians/by-centre${params}`));
   
   try {
-    const response = await fetch(`/api/technicians/by-centre${params}`, {
+    const response = await fetch(getApiUrl(`/technicians/by-centre${params}`), {
       headers: { Authorization: `Bearer ${token}` }
     });
     

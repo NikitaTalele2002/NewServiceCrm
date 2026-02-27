@@ -285,6 +285,17 @@ router.post('/create', authenticateToken, async (req, res) => {
 /**
  * GET /api/technician-sc-spare-requests/rental-allocation
  * Service Center views pending spare requests (Rental Allocation Page)
+ * 
+ * ✅ FIXED (Feb 26, 2026): 
+ *    - Removed hardcoded technician.service_center_id filter that hid requests
+ *    - Added support for 'open' status in default filter (now shows pending + open)
+ *    - Requests now visible regardless of technician reassignment
+ *    - See RENTAL_ALLOCATION_FIX_SUMMARY.md for details
+ * 
+ * @query {string} status - Filter by status: 'pending', 'open', 'approved', 'allocated', or custom
+ *                          Default: both 'pending' and 'open' (active requests)
+ * @query {string} dateFrom - Optional: filter from date
+ * @query {string} dateTo - Optional: filter to date
  */
 router.get('/rental-allocation', authenticateToken, async (req, res) => {
   try {
@@ -301,15 +312,31 @@ router.get('/rental-allocation', authenticateToken, async (req, res) => {
       return res.status(400).json({ error: 'Service Center ID required' });
     }
 
-    // Map status string to database status_id
+    // Map status string to database status filter
+    // Default: show pending and open statuses (active requests)
+    // 'pending', 'open', 'approved', 'allocated', etc. are allowed
     let statusFilter = '';
-    if (status === 'pending') {
-      statusFilter = 'AND st.status_name = \'pending\'';
-    } else if (status === 'approved') {
-      statusFilter = 'AND st.status_name = \'approved\'';
-    } else if (status === 'allocated') {
-      statusFilter = 'AND st.status_name IN (\'approved\', \'allocated\')';
+    
+    if (status && status !== 'all' && status !== 'All') {
+      if (status === 'pending') {
+        statusFilter = 'AND st.status_name = \'pending\'';
+      } else if (status === 'approved') {
+        statusFilter = 'AND st.status_name = \'approved\'';
+      } else if (status === 'allocated') {
+        statusFilter = 'AND st.status_name IN (\'approved\', \'allocated\', \'open\')';
+      } else if (status === 'open') {
+        statusFilter = 'AND st.status_name = \'open\'';
+      } else {
+        // Custom status filter
+        statusFilter = `AND st.status_name = '${status}'`;
+      }
+    } else {
+      // Default: show both 'pending' and 'open' statuses (main active statuses)
+      // This ensures requests created (which have 'open' status) are visible
+      statusFilter = 'AND st.status_name IN (\'pending\', \'open\')';
     }
+
+    console.log('📊 Applied status filter:', statusFilter);
 
     // Get all pending spare requests for this service center
     console.log('\n🔍 Fetching requests from database...');
@@ -334,10 +361,9 @@ router.get('/rental-allocation', authenticateToken, async (req, res) => {
       WHERE sr.requested_to_id = ?
         AND sr.requested_source_type = 'technician'
         AND sr.requested_to_type = 'service_center'
-        AND t.service_center_id = ?
         ${statusFilter}
       ORDER BY sr.created_at DESC
-    `, { replacements: [serviceCenterId, serviceCenterId], type: QueryTypes.SELECT });
+    `, { replacements: [serviceCenterId], type: QueryTypes.SELECT });
 
     console.log(`✅ Found ${requests.length} requests`);
 

@@ -1,6 +1,7 @@
 import React from 'react';
 import FormInput from '../../components/common/FormInput';
 import Button from '../../components/common/Button';
+import StatusFilterComponent from '../../components/StatusFilterComponent';
 
 export default function ComplaintSearchForm({ formData, onFormChange, onSubmit, loading }) {
   const handleChange = (e) => {
@@ -84,6 +85,18 @@ export default function ComplaintSearchForm({ formData, onFormChange, onSubmit, 
                 className="w-64"
               />
             </td>
+          </tr>
+
+          <tr>
+            <td className="p-2 font-semibold">Status</td>
+            <td className="p-2">
+              <StatusFilterComponent
+                selectedStatus={formData.status}
+                onStatusChange={(value) => onFormChange('status', value)}
+              />
+            </td>
+
+            <td colSpan="2"></td>
           </tr>
 
           <tr>

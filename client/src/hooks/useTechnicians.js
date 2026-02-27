@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { fetchTechniciansApi, addTechnicianRequestApi, getTechniciansByCentreApi } from '../services/technicianService';
 
 export const useTechnicians = () => {
@@ -6,7 +6,7 @@ export const useTechnicians = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
-  const fetchTechnicians = async () => {
+  const fetchTechnicians = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
@@ -17,18 +17,18 @@ export const useTechnicians = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
-  const addTechnicianRequest = async (technicianData) => {
+  const addTechnicianRequest = useCallback(async (technicianData) => {
     try {
       await addTechnicianRequestApi(technicianData);
       return { success: true };
     } catch (err) {
       return { success: false, error: err.message };
     }
-  };
+  }, []);
 
-  const getTechniciansByCentre = async (centerId) => {
+  const getTechniciansByCentre = useCallback(async (centerId) => {
     setLoading(true);
     setError(null);
     try {
@@ -63,11 +63,11 @@ export const useTechnicians = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     fetchTechnicians();
-  }, []);
+  }, [fetchTechnicians]);
 
   return {
     technicians,

@@ -568,6 +568,7 @@
 
 import React, { useState, useEffect } from 'react';
 import './rental_allocation.css';
+import { getApiUrl } from '../../../config/apiConfig';
 
 // ========== TEST HELPER FUNCTIONS (Development) ==========
 /**
@@ -577,7 +578,7 @@ import './rental_allocation.css';
 window.getTestToken = async (centerId = 2) => {
   try {
     console.log(`📞 Requesting test token for SC ${centerId}...`);
-    const response = await fetch(`http://localhost:5000/api/auth/test-token?centerId=${centerId}`);
+    const response = await fetch(getApiUrl('/auth/test-token') + `?centerId=${centerId}`);
     const data = await response.json();
     
     if (data.token) {
@@ -633,7 +634,7 @@ const RentalAllocation = () => {
         // OR set localStorage: localStorage.setItem('token', 'your-token-here')
       }
       
-      const apiUrl = 'http://localhost:5000/api/technician-sc-spare-requests/rental-allocation';
+      const apiUrl = getApiUrl('/technician-sc-spare-requests/rental-allocation');
       console.log('🔍 Fetching technician spare requests...');
       console.log('📍 API URL:', apiUrl);
       console.log('🔑 Token provided:', !!token);
@@ -962,7 +963,7 @@ const RequestDetail = ({ request, onBack }) => {
       console.log('⚠️ BRANCH B: Fetching items from API (items not in request prop or empty)');
       const token = localStorage.getItem('token');
       
-      fetch('http://localhost:5000/api/technician-sc-spare-requests/rental-allocation', {
+      fetch(getApiUrl('/technician-sc-spare-requests/rental-allocation'), {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
@@ -1046,19 +1047,31 @@ const RequestDetail = ({ request, onBack }) => {
 
       console.log('📤 Approving with items:', approvedItems);
 
-      const response = await axios.post(
+      const token = localStorage.getItem('token');
+      const response = await fetch(
         `/api/technician-sc-spare-requests/${request.requestId}/approve`,
-        { approvedItems },
-        { headers: { Authorization: `Bearer ${token}` } }
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({ approvedItems })
+        }
       );
 
-      console.log('✅ Approval response:', response.data);
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const data = await response.json();
+      console.log('✅ Approval response:', data);
 
       alert('Request approved successfully! Stock movement created.');
       onBack();
     } catch (err) {
       console.error('❌ Error approving request:', err);
-      setError(err.response?.data?.error || err.message || 'Failed to approve request');
+      setError(err.message || 'Failed to approve request');
     } finally {
       setSubmitting(false);
     }
@@ -1075,13 +1088,24 @@ const RequestDetail = ({ request, onBack }) => {
 
       console.log('📤 Rejecting request with reason:', reason);
 
-      const response = await axios.post(
+      const response = await fetch(
         `/api/technician-sc-spare-requests/${request.requestId}/reject`,
-        { reason },
-        { headers: { Authorization: `Bearer ${token}` } }
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({ reason })
+        }
       );
 
-      console.log('✅ Rejection response:', response.data);
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const data = await response.json();
+      console.log('✅ Rejection response:', data);
 
       alert('Request rejected successfully');
       onBack();

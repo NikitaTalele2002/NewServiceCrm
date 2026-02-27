@@ -1,4 +1,4 @@
-import { Plant, RSMStateMapping, SpareRequest, SpareRequestItem, Status, Approvals, SpareInventory, StockMovement, LogisticsDocuments, LogisticsDocumentItems, Cartons, GoodsMovementItems, SparePart, ServiceCenter } from '../models/index.js';
+import { Plant, RSMStateMapping, SpareRequest, SpareRequestItem, Status, Approvals, SpareInventory, StockMovement, LogisticsDocuments, LogisticsDocumentItems, Cartons, GoodsMovementItems, SparePart, ServiceCenter, SAPDocuments } from '../models/index.js';
 import express from 'express';
 import rsmController from '../controllers/rsmController.js';
 import { authenticateToken, requireRole } from '../middleware/auth.js';
@@ -333,6 +333,24 @@ router.post('/spare-requests/:requestId/approve', authenticateToken, requireRole
           }
 
           console.log(`✅ Created ${docRecord.document_type}: ${docRecord.document_number}`);
+        }
+
+        // Create INVOICE in SAPDocuments table
+        if (sapData.invoice) {
+          const invoiceData = {
+            sap_doc_type: 'INVOICE',
+            sap_doc_number: sapData.invoice.sap_doc_number,
+            module_type: 'spare_request',  // reference_type
+            reference_id: sapData.invoice.reference_id,  // SO number
+            asc_id: request.requested_source_id,  // ASC receiving the invoice
+            amount: sapData.invoice.amount,
+            status: 'Posted',
+            sap_created_at: sapData.invoice.document_date,
+            synced_at: new Date()
+          };
+
+          await SAPDocuments.create(invoiceData, { transaction });
+          console.log(`✅ Created INVOICE: ${sapData.invoice.sap_doc_number}`);
         }
       }
       console.log(`✅ SAP documents created for request ${requestId}`);

@@ -29,7 +29,7 @@ export default (sequelize) => {
         // FK removed - added via ALTER TABLE
       },
       assigned_reason: {
-        type: DataTypes.ENUM('ABSENT', 'OVERLOADED', 'CUSTOMER_REQUEST', 'PERFORMANCE', 'AVAILABILITY'),
+        type: DataTypes.ENUM('INITIAL_ALLOCATION', 'REALLOCATION', 'ABSENT', 'OVERLOADED', 'CUSTOMER_REQUEST', 'PERFORMANCE', 'AVAILABILITY'),
         allowNull: true,
         field: 'assigned_reason',
       },

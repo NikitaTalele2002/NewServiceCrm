@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { getApiUrl } from '../../../config/apiConfig';
 
 /**
  * TechnicianInventory Page
@@ -31,7 +32,7 @@ const TechnicianInventory = () => {
       setError('');
       try {
         const token = getToken();
-        const response = await fetch('http://localhost:5000/api/technicians/by-centre?centerId=4', {
+        const response = await fetch(getApiUrl(`/technicians/by-centre?centerId=${centerId}`), {
           headers: {
             'Authorization': `Bearer ${token}`,
             'Content-Type': 'application/json'
@@ -67,7 +68,7 @@ const TechnicianInventory = () => {
     try {
       const token = getToken();
       const response = await fetch(
-        `http://localhost:5000/api/technicians/${technician.technician_id}/inventory`,
+        getApiUrl(`/spare-requests/technicians/${technician.technician_id}/inventory`),
         {
           headers: {
             'Authorization': `Bearer ${token}`,

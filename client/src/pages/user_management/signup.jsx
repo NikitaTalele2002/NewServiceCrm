@@ -3,6 +3,7 @@ import FormInput from "../../components/common/FormInput";
 import Button from "../../components/common/Button";
 import ErrorMessage from "../../components/common/ErrorMessage";
 import { useNavigate } from "react-router-dom";
+import { getApiUrl } from "../../config/apiConfig";
 
 export default function Signup() {
     const [Username, setUsername] = React.useState('');
@@ -27,7 +28,7 @@ export default function Signup() {
         }
         setLoading(true);
         try {
-            const res = await fetch('http://localhost:5000/api/auth/register', {
+            const res = await fetch(getApiUrl('/auth/register'), {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ Username, Email, Password, Phone })

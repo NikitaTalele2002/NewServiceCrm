@@ -1,7 +1,9 @@
+import { getApiUrl } from '../config/apiConfig';
+
 export const searchClaimsApi = async (params) => {
   const token = localStorage.getItem('token');
   const query = new URLSearchParams(params);
-  const response = await fetch(`/api/monthly-claims/search?${query.toString()}`, {
+  const response = await fetch(getApiUrl(`/monthly-claims/search?${query.toString()}`), {
     headers: { Authorization: `Bearer ${token}` }
   });
   if (!response.ok) throw new Error('Failed to search claims');
@@ -10,7 +12,7 @@ export const searchClaimsApi = async (params) => {
 
 export const updateClaimApi = async (claimData) => {
   const token = localStorage.getItem('token');
-  const response = await fetch('/api/monthly-claims/update', {
+  const response = await fetch(getApiUrl('/monthly-claims/update'), {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -24,7 +26,7 @@ export const updateClaimApi = async (claimData) => {
 
 export const submitClaimApi = async (claimData) => {
   const token = localStorage.getItem('token');
-  const response = await fetch('/api/monthly-claims/submit', {
+  const response = await fetch(getApiUrl('/monthly-claims/submit'), {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',

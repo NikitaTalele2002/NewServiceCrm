@@ -8,7 +8,9 @@
  * - Tracking inventory changes
  */
 
-const API_BASE = '/api/spare-return-requests';
+import { getApiUrl } from '../config/apiConfig';
+
+const API_BASE = getApiUrl('/spare-return-requests');
 
 export const spareReturnManagementService = {
   /**

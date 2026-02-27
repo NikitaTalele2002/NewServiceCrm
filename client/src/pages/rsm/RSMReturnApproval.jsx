@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { getApiUrl } from '../../config/apiConfig';
 import './RSMReturnApproval.css';
 
 export default function RSMReturnApproval() {
@@ -23,7 +24,7 @@ export default function RSMReturnApproval() {
     const fetchPlants = async () => {
       try {
         console.log('[RSMReturnApproval] Fetching assigned plants...');
-        const response = await fetch('/api/branch/assigned-plants', {
+        const response = await fetch(getApiUrl('/branch/assigned-plants'), {
           headers: { Authorization: `Bearer ${token}` }
         });
         console.log('[RSMReturnApproval] Plants response status:', response.status);
@@ -117,7 +118,7 @@ export default function RSMReturnApproval() {
         receiveQty: approvalQtys[item.id] || item.returnQty
       }));
 
-      const response = await fetch('/api/spare-returns/approve', {
+      const response = await fetch(getApiUrl('/spare-returns/approve'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -165,7 +166,7 @@ export default function RSMReturnApproval() {
 
     setSubmitting(true);
     try {
-      const response = await fetch('/api/spare-returns/reject', {
+      const response = await fetch(getApiUrl('/spare-returns/reject'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

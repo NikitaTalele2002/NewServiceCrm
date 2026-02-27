@@ -65,16 +65,14 @@ router.get('/', optionalAuthenticate, async (req, res) => {
     
     // Filter by status ID if provided
     if (status === 'Allocated') {
-      // status_id = 3 for Allocated
-      whereConditions.push('sr.status_id = ?');
-      replacements.push(3);
+      // Dynamically get Allocated status ID
+      whereConditions.push('sr.status_id IN (SELECT status_id FROM status WHERE LOWER(status_name) = \'allocated\')');
     } else if (status === 'pending') {
-      // status_id = 4 for pending (or find dynamically)
-      whereConditions.push('sr.status_id IN (SELECT status_id FROM status WHERE status_name LIKE ?)');
-      replacements.push('%pending%');
+      // Dynamically get pending status ID
+      whereConditions.push('sr.status_id IN (SELECT status_id FROM status WHERE LOWER(status_name) = \'pending\')');
     } else if (status) {
-      // Generic status filter
-      whereConditions.push('sr.status_id IN (SELECT status_id FROM status WHERE status_name LIKE ?)');
+      // Generic status filter - use LIKE for flexibility
+      whereConditions.push('sr.status_id IN (SELECT status_id FROM status WHERE LOWER(status_name) LIKE LOWER(?))');
       replacements.push('%' + status + '%');
     }
     

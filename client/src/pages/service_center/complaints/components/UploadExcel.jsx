@@ -12,7 +12,7 @@ const UploadExcel = ({ onUploaded }) => {
     formData.append('file', file);
 
     try {
-      const res = await fetch(`http://localhost:5000/api/location/uploadExcel?mode=${mode}`, {
+      const res = await fetch(getApiUrl(`/location/uploadExcel?mode=${mode}`), {
         method: 'POST',
         body: formData,
       });

@@ -5,6 +5,7 @@ import { useAuth } from "../../hooks/useAuth";
 import FormInput from "../../components/common/FormInput";
 import Button from "../../components/common/Button";
 import ErrorMessage from "../../components/common/ErrorMessage";
+import { getApiUrl } from "../../config/apiConfig";
 
 export default function Login() {
   const { login: authLogin, loading: authLoading, error } = useAuth();
@@ -38,7 +39,7 @@ const handleLogin = (e) => {
   setErrorMessage('');
 
   // Call backend auth endpoint (use explicit backend origin to avoid dev-server routing issues)
-  fetch('http://localhost:5000/api/auth/login', {
+  fetch(getApiUrl('/auth/login'), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ username, password }),

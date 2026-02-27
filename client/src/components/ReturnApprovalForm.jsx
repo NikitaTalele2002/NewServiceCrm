@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import './RentalReturn.css';
 
 const ReturnApprovalForm = ({
@@ -6,15 +6,37 @@ const ReturnApprovalForm = ({
   approvalRemarks,
   onRemarksChange,
   onApprove,
+  onApprovedQtysChange,
   onBack,
   loading,
   error
 }) => {
+  const [approvedQtys, setApprovedQtys] = useState(
+    returnRequest?.items?.reduce((acc, item, idx) => {
+      acc[idx] = item.approvedQty || item.requestedQty;
+      return acc;
+    }, {}) || {}
+  );
+
+  const handleQtyChange = (itemIdx, newQty) => {
+    const qty = Math.max(0, Math.min(returnRequest.items[itemIdx].requestedQty, newQty));
+    const updated = { ...approvedQtys, [itemIdx]: qty };
+    setApprovedQtys(updated);
+    if (onApprovedQtysChange) {
+      onApprovedQtysChange(updated);
+    }
+  };
+
+  const handleApproveClick = () => {
+    onApprove(approvedQtys);
+  };
+
   if (!returnRequest) {
     return <div className="loading">Loading return request details...</div>;
   }
 
   const totalQty = returnRequest.items?.reduce((sum, item) => sum + item.requestedQty, 0) || 0;
+  const totalApprovedQty = Object.values(approvedQtys).reduce((sum, qty) => sum + qty, 0) || 0;
 
   return (
     <div className="return-approval-form">
@@ -43,19 +65,19 @@ const ReturnApprovalForm = ({
           <div className="detail-grid">
             <div className="detail-item">
               <label>Technician</label>
-              <value className="value-highlight">{returnRequest.technicianName}</value>
+              <div className="form-value value-highlight">{returnRequest.technicianName}</div>
             </div>
             <div className="detail-item">
               <label>Technician ID</label>
-              <value>{returnRequest.technicianId}</value>
+              <div className="form-value">{returnRequest.technicianId}</div>
             </div>
             <div className="detail-item">
               <label>Status</label>
-              <value className="status-badge">{returnRequest.status}</value>
+              <div className="form-value status-badge">{returnRequest.status}</div>
             </div>
             <div className="detail-item">
               <label>Submitted Date</label>
-              <value>
+              <div className="form-value">
                 {new Date(returnRequest.createdAt).toLocaleDateString('en-US', {
                   year: 'numeric',
                   month: 'short',
@@ -63,7 +85,7 @@ const ReturnApprovalForm = ({
                   hour: '2-digit',
                   minute: '2-digit'
                 })}
-              </value>
+              </div>
             </div>
           </div>
         </div>
@@ -79,6 +101,7 @@ const ReturnApprovalForm = ({
                   <th>Part Name</th>
                   <th>Requested Qty</th>
                   <th>Approved Qty</th>
+                  <th>Actions</th>
                   <th>Status</th>
                 </tr>
               </thead>
@@ -88,20 +111,54 @@ const ReturnApprovalForm = ({
                     <tr key={idx}>
                       <td className="sku-cell">{item.sku}</td>
                       <td>{item.name}</td>
-                      <td text-align="center">{item.requestedQty}</td>
-                      <td>{item.approvedQty}</td>
+                      <td className="qty-cell">{item.requestedQty}</td>
+                      <td className="approved-qty-cell">
+                        <div className="qty-input-group">
+                          <input
+                            type="number"
+                            min="0"
+                            max={item.requestedQty}
+                            value={approvedQtys[idx] || 0}
+                            onChange={(e) => handleQtyChange(idx, parseInt(e.target.value) || 0)}
+                            className="qty-input"
+                            disabled={loading}
+                          />
+                        </div>
+                      </td>
+                      <td className="actions-cell">
+                        <div className="qty-buttons">
+                          <button
+                            className="btn-qty-adjust"
+                            onClick={() => handleQtyChange(idx, (approvedQtys[idx] || 0) - 1)}
+                            disabled={loading || (approvedQtys[idx] || 0) <= 0}
+                            title="Decrease quantity"
+                          >
+                            −
+                          </button>
+                          <button
+                            className="btn-qty-adjust"
+                            onClick={() => handleQtyChange(idx, (approvedQtys[idx] || 0) + 1)}
+                            disabled={loading || (approvedQtys[idx] || 0) >= item.requestedQty}
+                            title="Increase quantity"
+                          >
+                            +
+                          </button>
+                        </div>
+                      </td>
                       <td>
-                        {item.approvedQty > 0 ? (
-                          <span className="badge badge-approved">✓ Approved</span>
+                        {approvedQtys[idx] > 0 ? (
+                          <span className="badge badge-approved">
+                            ✓ {approvedQtys[idx]}/{item.requestedQty}
+                          </span>
                         ) : (
-                          <span className="badge badge-pending">⏳ Pending</span>
+                          <span className="badge badge-pending">⏳ 0/{item.requestedQty}</span>
                         )}
                       </td>
                     </tr>
                   ))
                 ) : (
                   <tr>
-                    <td colSpan="5" className="empty-row">
+                    <td colSpan="6" className="empty-row">
                       No items found
                     </td>
                   </tr>
@@ -110,7 +167,12 @@ const ReturnApprovalForm = ({
             </table>
             <div className="items-summary">
               <span>Total Items to Approve:</span>
-              <strong>{totalQty} units</strong>
+              <strong>{totalApprovedQty} / {totalQty} units</strong>
+              {totalApprovedQty < totalQty && (
+                <span className="summary-warning">
+                  ⚠️ {totalQty - totalApprovedQty} units not approved
+                </span>
+              )}
             </div>
           </div>
         </div>
@@ -139,8 +201,8 @@ const ReturnApprovalForm = ({
           </button>
           <button
             className="btn btn-primary btn-approve"
-            onClick={onApprove}
-            disabled={loading}
+            onClick={handleApproveClick}
+            disabled={loading || totalApprovedQty === 0}
           >
             {loading ? (
               <>
@@ -148,7 +210,7 @@ const ReturnApprovalForm = ({
               </>
             ) : (
               <>
-                <span className="btn-icon">✓</span> Approve Return Request
+                <span className="btn-icon">✓</span> Approve Return Request ({totalApprovedQty} units)
               </>
             )}
           </button>
@@ -317,6 +379,90 @@ const ReturnApprovalForm = ({
           font-family: monospace;
           font-weight: 600;
           color: #0066cc;
+        }
+
+        .qty-cell {
+          text-align: center;
+          font-weight: 500;
+        }
+
+        .approved-qty-cell {
+          padding: 8px 12px !important;
+        }
+
+        .qty-input-group {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+        }
+
+        .qty-input {
+          width: 70px;
+          padding: 6px 8px;
+          border: 2px solid #ddd;
+          border-radius: 4px;
+          font-size: 14px;
+          font-weight: 600;
+          text-align: center;
+          transition: border-color 0.2s;
+        }
+
+        .qty-input:focus {
+          outline: none;
+          border-color: #0066cc;
+          background-color: #f0f7ff;
+        }
+
+        .qty-input:disabled {
+          background-color: #f5f5f5;
+          cursor: not-allowed;
+          color: #999;
+        }
+
+        .actions-cell {
+          padding: 8px 12px !important;
+        }
+
+        .qty-buttons {
+          display: flex;
+          gap: 4px;
+        }
+
+        .btn-qty-adjust {
+          width: 32px;
+          height: 32px;
+          padding: 0;
+          border: 1px solid #ddd;
+          background-color: #f5f5f5;
+          border-radius: 4px;
+          cursor: pointer;
+          font-size: 18px;
+          font-weight: 600;
+          color: #333;
+          transition: all 0.2s;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+        }
+
+        .btn-qty-adjust:hover:not(:disabled) {
+          background-color: #e8e8e8;
+          border-color: #999;
+        }
+
+        .btn-qty-adjust:active:not(:disabled) {
+          background-color: #d0d0d0;
+        }
+
+        .btn-qty-adjust:disabled {
+          opacity: 0.4;
+          cursor: not-allowed;
+        }
+
+        .summary-warning {
+          color: #ff9800;
+          font-size: 12px;
+          font-weight: 600;
         }
 
         .badge {

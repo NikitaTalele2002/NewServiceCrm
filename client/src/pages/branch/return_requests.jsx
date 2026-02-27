@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { useBranch } from "../../hooks/useBranch";
+import { getApiUrl } from "../../config/apiConfig";
 import FormInput from "../../components/common/FormInput";
 import FilterSelect from "../../components/common/FilterSelect";
 import Button from "../../components/common/Button";
@@ -118,7 +119,7 @@ export default function BranchReturnRequests() {
       rejectedQty: parseInt(item.cfRejectedQty ?? 0),
     }));
     try {
-      const res = await fetch(`/api/branch/branch-requests/${selectedRequest.id}/items`, {
+      const res = await fetch(getApiUrl(`/branch/branch-requests/${selectedRequest.id}/items`), {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -141,7 +142,7 @@ export default function BranchReturnRequests() {
 
   const handleApprove = async (requestId) => {
     try {
-      const res = await fetch(`/api/branch/branch-requests/${requestId}/status`, {
+      const res = await fetch(getApiUrl(`/branch/branch-requests/${requestId}/status`), {
         method: 'PUT',
         headers: {
           ...getAuthHeader(),
@@ -163,7 +164,7 @@ export default function BranchReturnRequests() {
 
   const handleReject = async (requestId) => {
     try {
-      const res = await fetch(`/api/branch/branch-requests/${requestId}/status`, {
+      const res = await fetch(getApiUrl(`/branch/branch-requests/${requestId}/status`), {
         method: 'PUT',
         headers: {
           ...getAuthHeader(),

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { getApiUrl } from '../../../config/apiConfig';
 import './ViewSpareReturnRequest.css';
 
 export default function ViewSpareReturnRequest() {
@@ -43,7 +44,7 @@ export default function ViewSpareReturnRequest() {
     setError('');
     try {
       console.log('🔄 Fetching return requests...');
-      const response = await fetch('/api/spare-returns/list', {
+      const response = await fetch(getApiUrl('/spare-returns/list'), {
         headers: { Authorization: `Bearer ${token}` }
       });
 
@@ -80,7 +81,7 @@ export default function ViewSpareReturnRequest() {
     setError('');
     try {
       console.log(`📋 Fetching details for request: ${requestId}`);
-      const response = await fetch(`/api/spare-returns/view/${requestId}`, {
+      const response = await fetch(getApiUrl(`/spare-returns/view/${requestId}`), {
         headers: { Authorization: `Bearer ${token}` }
       });
 

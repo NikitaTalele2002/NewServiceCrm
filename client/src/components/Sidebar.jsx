@@ -130,7 +130,8 @@ export default function Sidebar({ isCollapsed, setIsCollapsed }) {
           // RSM-specific links
           ...(role === 'rsm' ? [
             { name: "RSM Order Requests", path: "/branch/rsm-order-requests" },
-            { name: "Return Approvals", path: "/branch/return-approvals" }
+            { name: "Return Approvals", path: "/branch/return-approvals" },
+            { name: "Cancellation Approvals", path: "/branch/cancellation-approvals" }
           ] : []),
           { name: "Stock Adjust", path: "/branch/stock-adjust" },
           { name: "Return Requests", path: "/branch/returns" },

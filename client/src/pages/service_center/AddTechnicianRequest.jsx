@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { getApiUrl } from '../../config/apiConfig';
 import FormInput from '../../components/common/FormInput';
 import Button from '../../components/common/Button';
 
@@ -18,7 +19,7 @@ const AddTechnicianRequest = () => {
     e.preventDefault();
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch('/api/technician-status-requests', {
+      const response = await fetch(getApiUrl('/technician-status-requests'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

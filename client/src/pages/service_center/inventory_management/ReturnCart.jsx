@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { getApiUrl } from '../../../config/apiConfig';
 import './ReturnCart.css';
 
 export default function ReturnCart() {
@@ -18,7 +19,7 @@ export default function ReturnCart() {
     const fetchReturnCart = async () => {
       setLoading(true);
       try {
-        const response = await fetch(`/api/spare-returns/return-cart/${requestId}`, {
+        const response = await fetch(getApiUrl(`/spare-returns/return-cart/${requestId}`), {
           headers: { Authorization: `Bearer ${token}` }
         });
 
@@ -50,7 +51,7 @@ export default function ReturnCart() {
 
     setCreatingChallan(true);
     try {
-      const response = await fetch('/api/spare-returns/create-challan', {
+      const response = await fetch(getApiUrl('/spare-returns/create-challan'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

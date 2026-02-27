@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useRole } from '../../context/RoleContext';
+import { getApiUrl } from '../../config/apiConfig';
 // import { sequelize } from '../../database';
 
 export default function RsmCurrentInventory() {
@@ -17,7 +18,7 @@ export default function RsmCurrentInventory() {
       setError(null);
       try {
         const token = localStorage.getItem('token');
-        const res = await fetch('http://localhost:5000/api/branch/assigned-plants', {
+        const res = await fetch(getApiUrl('/branch/assigned-plants'), {
           headers: { 'Authorization': `Bearer ${token}` }
         });
         const data = await res.json();
@@ -50,7 +51,10 @@ export default function RsmCurrentInventory() {
       try {
         const token = localStorage.getItem('token');
         // Use plant_id directly for RSM inventory fetch
-        let url = `http://localhost:5000/api/branch/current-inventory?plant_id=${selectedPlant}`;
+        let url = getApiUrl(`/branch/current-inventory?plant_id=${selectedPlant}`);
+        console.log('[RsmCurrentInventory] Fetching inventory for plant_id:', selectedPlant);
+        console.log('[RsmCurrentInventory] URL:', url);
+        
         // Timeout logic
         const timeout = setTimeout(() => {
           abortController.abort();
@@ -82,10 +86,14 @@ export default function RsmCurrentInventory() {
           return;
         }
         const data = await res.json();
+        console.log('[RsmCurrentInventory] Response status:', res.status);
+        console.log('[RsmCurrentInventory] Response data:', data);
+        
         if (res.status === 403) {
           setError(data.error || 'Not authorized for this branch');
           setInventory([]);
         } else if (data.ok) {
+          console.log('[RsmCurrentInventory] Inventory items found:', data.inventory?.length || 0);
           setInventory(data.inventory);
           setError(null);
         } else {
@@ -93,6 +101,7 @@ export default function RsmCurrentInventory() {
           setInventory([]);
         }
       } catch (err) {
+        console.error('[RsmCurrentInventory] Error:', err);
         setError(err.message);
         setInventory([]);
       } finally {
@@ -115,12 +124,17 @@ export default function RsmCurrentInventory() {
           <select
             className="p-2 border rounded w-full"
             value={selectedPlant}
-            onChange={e => setSelectedPlant(e.target.value)}
+            onChange={e => {
+              setSelectedPlant(e.target.value);
+              console.log('[RsmCurrentInventory] Plant selected:', e.target.value);
+            }}
             disabled={plants.length === 0}
           >
             <option value="">-- Select Plant --</option>
             {plants.map(p => (
-              <option key={p.plant_id} value={p.plant_id}>{p.plant_name || `Plant ${p.plant_id}`}</option>
+              <option key={p.plant_id} value={p.plant_id}>
+                {p.plant_name || p.name || `Plant ${p.plant_id}`}
+              </option>
             ))}
           </select>
         </div>
@@ -133,11 +147,14 @@ export default function RsmCurrentInventory() {
       )}
       {!loading && !error && inventory.length > 0 && (
         <div className="bg-white rounded-lg shadow overflow-x-auto">
-          <table className="w-full">
+          <table className="w-full whitespace-nowrap">
             <thead>
               <tr className="bg-gray-100 border-b">
                 <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase">SKU</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase">PART</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Spare Name</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Product Group</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Product</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Model</th>
                 <th className="px-4 py-3 text-right text-xs font-semibold text-gray-700 uppercase">Good Qty</th>
                 <th className="px-4 py-3 text-right text-xs font-semibold text-gray-700 uppercase">Defective Qty</th>
               </tr>
@@ -146,7 +163,10 @@ export default function RsmCurrentInventory() {
               {inventory.map((item, idx) => (
                 <tr key={item.sku || idx} className="border-b hover:bg-gray-50 transition">
                   <td className="px-4 py-2 text-blue-600 underline cursor-pointer">{item.sku}</td>
-                  <td className="px-4 py-2 text-gray-900">{item.PART}</td>
+                  <td className="px-4 py-2 text-gray-900">{item.spare_name || item.PART || '-'}</td>
+                  <td className="px-4 py-2 text-gray-700">{item.product_group || '-'}</td>
+                  <td className="px-4 py-2 text-gray-700">{item.product || '-'}</td>
+                  <td className="px-4 py-2 text-gray-700">{item.model || '-'}</td>
                   <td className="px-4 py-2 text-right">
                     <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">{item.goodQty}</span>
                   </td>

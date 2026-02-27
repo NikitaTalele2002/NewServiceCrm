@@ -1,4 +1,6 @@
-const API_BASE_URL = 'http://localhost:5000/api';
+import { getApiUrl } from '../config/apiConfig';
+
+const API_BASE_URL = getApiUrl('');
 
 export const productReplacementService = {
   async fetchProductGroups(token) {

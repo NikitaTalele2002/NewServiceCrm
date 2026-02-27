@@ -25,7 +25,7 @@ const router = express.Router();
 
 /**
  * POST /api/asc-branch-requests
- * Create spare request from ASC to Branch
+ * Create spare request from ASC to Branch/Warehouse
  * 
  * Body:
  * {
@@ -33,10 +33,13 @@ const router = express.Router();
  *   spare_id: number,
  *   quantity: number,
  *   asc_id: number (source - ASC service center),
- *   branch_id: number (destination - Branch),
- *   reason: "defect" | "unused", (optional)
+ *   branch_id: number (destination - Warehouse/Branch),
  *   notes: string (optional)
  * }
+ * 
+ * Note: request_reason is set DYNAMICALLY based on spare_request_type
+ * - ASC_RETURN_DEFECTIVE → reason: "defect"
+ * - ASC_RETURN_EXCESS → reason: "excess"
  */
 router.post('/', authenticateToken, async (req, res) => {
   const transaction = await sequelize.transaction();
@@ -48,7 +51,6 @@ router.post('/', authenticateToken, async (req, res) => {
       quantity,
       asc_id,
       branch_id,
-      reason,
       notes
     } = req.body;
 
@@ -69,6 +71,11 @@ router.post('/', authenticateToken, async (req, res) => {
       });
     }
 
+    // Dynamically set reason based on spare_request_type
+    const requestReason = spare_request_type === SPARE_REQUEST_TYPES.ASC_RETURN_DEFECTIVE 
+      ? 'defect' 
+      : 'excess';
+
     // Verify spare exists
     const spare = await sequelize.query(
       'SELECT Id, PART, DESCRIPTION FROM spare_parts WHERE Id = ?',
@@ -86,6 +93,20 @@ router.post('/', authenticateToken, async (req, res) => {
         error: `Spare ${spare_id} not found`
       });
     }
+
+    // Get the plant assigned to this ASC
+    const ascPlantInfo = await sequelize.query(
+      `SELECT TOP 1 plant_id FROM service_centers WHERE asc_id = ?`,
+      {
+        replacements: [asc_id],
+        type: sequelize.QueryTypes.SELECT,
+        transaction
+      }
+    );
+
+    const targetPlantId = (ascPlantInfo && ascPlantInfo[0]?.plant_id) || branch_id || 1;
+    
+    console.log(`✓ ASC ${asc_id} assigned to Plant: ${targetPlantId}`);
 
     // Check stock availability at ASC
     // For ASC_RETURN_DEFECTIVE: Check defective bucket
@@ -116,14 +137,14 @@ router.post('/', authenticateToken, async (req, res) => {
         spare_id,
         quantity,
         requested_by: req.user?.id || 0,
-        approved_status: 'approved', // ASC-to-Branch requests are typically pre-approved
+        approved_status: 'approved', // ASC-to-Plant requests are typically pre-approved
         status: 'open',
         notes,
-        request_reason: reason || spare_request_type,
+        request_reason: requestReason, // Dynamic: 'defect' or 'excess'
         requested_source_type: 'service_center',
         requested_source_id: asc_id,
-        requested_to_type: 'branch',
-        requested_to_id: branch_id,
+        requested_to_type: 'plant',
+        requested_to_id: targetPlantId, // Use ASC's assigned plant, not hardcoded warehouse
         created_at: new Date()
       },
       { transaction }

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { getApiUrl } from '../../../config/apiConfig';
 
 const CurrentInventory = () => {
   const [filters, setFilters] = useState({
@@ -36,7 +37,7 @@ const CurrentInventory = () => {
     setError(null);
     try {
       const token = getToken();
-      const response = await fetch(`/api/returns/service-centers/${centerId}/inventory/groups`, {
+      const response = await fetch(getApiUrl(`/returns/service-centers/${centerId}/inventory/groups`), {
         headers: { Authorization: `Bearer ${token}` }
       });
       if (!response.ok) throw new Error('Failed to fetch product groups');
@@ -60,7 +61,7 @@ const CurrentInventory = () => {
     setError(null);
     try {
       const token = getToken();
-      const response = await fetch(`/api/returns/service-centers/${centerId}/inventory/products?group=${encodeURIComponent(groupId)}`, {
+      const response = await fetch(getApiUrl(`/returns/service-centers/${centerId}/inventory/products?group=${encodeURIComponent(groupId)}`), {
         headers: { Authorization: `Bearer ${token}` }
       });
       if (!response.ok) throw new Error('Failed to fetch products');
@@ -84,7 +85,7 @@ const CurrentInventory = () => {
     setError(null);
     try {
       const token = getToken();
-      const response = await fetch(`/api/returns/service-centers/${centerId}/inventory/models?product=${encodeURIComponent(productId)}`, {
+      const response = await fetch(getApiUrl(`/returns/service-centers/${centerId}/inventory/models?product=${encodeURIComponent(productId)}`), {
         headers: { Authorization: `Bearer ${token}` }
       });
       if (!response.ok) throw new Error('Failed to fetch models');
@@ -110,7 +111,7 @@ const CurrentInventory = () => {
       if (filters.productType) params.append('product', filters.productType);
       if (filters.model) params.append('model', filters.model);
 
-      const response = await fetch(`/api/returns/service-centers/${centerId}/inventory?${params}`, {
+      const response = await fetch(getApiUrl(`/returns/service-centers/${centerId}/inventory?${params}`), {
         headers: { Authorization: `Bearer ${token}` }
       });
       if (!response.ok) throw new Error('Failed to fetch inventory');

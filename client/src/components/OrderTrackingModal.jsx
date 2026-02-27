@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { getApiUrl } from '../config/apiConfig';
 
 export default function OrderTrackingModal({ requestId, onClose }) {
   const [trackingData, setTrackingData] = useState(null);
@@ -10,7 +11,7 @@ export default function OrderTrackingModal({ requestId, onClose }) {
       try {
         const token = localStorage.getItem('token');
         const res = await fetch(
-          `http://localhost:5000/api/logistics/summary/${requestId}`,
+          getApiUrl(`/logistics/summary/${requestId}`),
           {
             headers: { 'Authorization': `Bearer ${token}` }
           }

@@ -166,6 +166,7 @@ import { poolPromise } from "../db.js";
 import sql from "mssql";
 import { optionalAuthenticate } from '../middleware/auth.js';
 import * as autoAssign from './autoAssign.js';
+import { ServiceCenter } from '../models/index.js';
 
 // ================== REGISTER COMPLAINT ==================
 router.post("/", async (req, res) => {
@@ -592,11 +593,21 @@ router.get("/", optionalAuthenticate, async (req, res) => {
         centerId = req.user.centerId;
       } else if (req.user.role === 'service_center' || req.user.role === 'service-center') {
         try {
-          const sc = await pool.request()
-            .input('Username', sql.NVarChar, req.user.username)
-            .query("SELECT TOP 1 Id FROM service_centers WHERE name = @Username OR phone = @Username");
-          if (sc.recordset && sc.recordset.length > 0) {
-            centerId = sc.recordset[0].Id;
+          // Try Sequelize lookup first
+          const sc = await ServiceCenter.findOne({
+            where: { user_id: req.user.id },
+            attributes: ['asc_id']
+          });
+          if (sc) {
+            centerId = sc.asc_id;
+          } else {
+            // Fallback to SQL lookup
+            const scResult = await pool.request()
+              .input('Username', sql.NVarChar, req.user.username)
+              .query("SELECT TOP 1 Id FROM service_centers WHERE name = @Username OR phone = @Username");
+            if (scResult.recordset && scResult.recordset.length > 0) {
+              centerId = scResult.recordset[0].Id;
+            }
           }
         } catch (e) {
           console.error('Error resolving service center for user:', e && e.message ? e.message : e);
@@ -681,9 +692,9 @@ router.get("/", optionalAuthenticate, async (req, res) => {
 
 // ================== ASSIGN TECHNICIAN ==================
 router.post("/assign-technician", async (req, res) => {
-  const { complaintId, technicianId } = req.body;
+  const { complaintId, technicianId, assignmentReason } = req.body;
 
-  console.log('Assign technician request:', { complaintId, technicianId });
+  console.log('🔧 Assign technician request:', { complaintId, technicianId, assignmentReason });
 
   if (!complaintId || !technicianId) {
     return res.status(400).json({ message: "Missing complaintId or technicianId" });
@@ -695,14 +706,26 @@ router.post("/assign-technician", async (req, res) => {
     // Fetch complaint to check its assigned service center
     const complaintRes = await pool.request()
       .input("ComplaintId", sql.Int, Number(complaintId))
-      .query("SELECT call_id, assigned_asc_id FROM calls WHERE call_id = @ComplaintId");
+      .query(`
+        SELECT 
+          call_id, 
+          assigned_asc_id, 
+          assigned_tech_id,
+          status_id
+        FROM calls 
+        WHERE call_id = @ComplaintId
+      `);
 
-    console.log('Complaint query result:', complaintRes.recordset);
+    console.log('📋 Complaint query result:', complaintRes.recordset);
 
     if (!complaintRes.recordset.length) {
       return res.status(404).json({ message: "Complaint not found" });
     }
-    const assignedCenterId = complaintRes.recordset[0].assigned_asc_id;
+    
+    const complaint = complaintRes.recordset[0];
+    const assignedCenterId = complaint.assigned_asc_id;
+    const previousTechId = complaint.assigned_tech_id;
+    const previousStatusId = complaint.status_id;
 
     if (!assignedCenterId) {
       return res.status(400).json({ message: "Complaint is not assigned to any service center" });
@@ -713,7 +736,7 @@ router.post("/assign-technician", async (req, res) => {
       .input("TechnicianId", sql.Int, Number(technicianId))
       .query("SELECT technician_id, name, service_center_id FROM technicians WHERE technician_id = @TechnicianId AND status = 'active'");
 
-    console.log('Technician query result:', techRes.recordset);
+    console.log('👷 Technician query result:', techRes.recordset);
 
     if (!techRes.recordset.length) {
       return res.status(404).json({ message: "Technician not found or inactive" });
@@ -727,25 +750,224 @@ router.post("/assign-technician", async (req, res) => {
       });
     }
 
-    // Assign technician to call
-    await pool.request()
+    // Check if this is a reallocation (technician already assigned and different from new one)
+    const isReallocation = previousTechId && previousTechId !== technicianId;
+    console.log(`ℹ️ Allocation type: ${isReallocation ? 'RE-ALLOCATION' : 'INITIAL ALLOCATION'}`);
+
+    // Get or create status for allocation/reallocation with specific IDs
+    const statusName = isReallocation ? 'Re-Allocated' : 'Allocated';
+    const expectedStatusId = isReallocation ? 15 : 14;
+    
+    let statusRes = await pool.request()
+      .input("StatusName", sql.NVarChar(100), statusName)
+      .query(`SELECT status_id FROM status WHERE status_name = @StatusName`);
+
+    let statusId = statusRes.recordset.length > 0 ? statusRes.recordset[0].status_id : null;
+
+    if (!statusId) {
+      // Create status with specific ID if it doesn't exist
+      console.log(`📌 Creating new status: '${statusName}' with ID ${expectedStatusId}`);
+      try {
+        const createStatusRes = await pool.request()
+          .input("StatusId", sql.Int, expectedStatusId)
+          .input("StatusName", sql.NVarChar(100), statusName)
+          .query(`
+            SET IDENTITY_INSERT status ON;
+            INSERT INTO status (status_id, status_name, created_at, updated_at)
+            VALUES (@StatusId, @StatusName, GETDATE(), GETDATE());
+            SET IDENTITY_INSERT status OFF;
+            SELECT @StatusId as status_id;
+          `);
+        statusId = expectedStatusId;
+      } catch (err) {
+        // If ID already exists, just fetch it
+        console.log(`⚠️ Status ID ${expectedStatusId} already exists, fetching...`);
+        const fetchRes = await pool.request()
+          .input("StatusId", sql.Int, expectedStatusId)
+          .query(`SELECT status_id FROM status WHERE status_id = @StatusId`);
+        if (fetchRes.recordset.length > 0) {
+          statusId = expectedStatusId;
+        } else {
+          throw new Error(`Failed to create or find status '${statusName}'`);
+        }
+      }
+    }
+
+    console.log(`📍 Using status ID: ${statusId} for '${statusName}'`);
+
+    // If this is a reallocation, mark the previous assignment as inactive
+    if (isReallocation && previousTechId) {
+      console.log(`🔄 Marking previous assignment as inactive`);
+      await pool.request()
+        .input("CallId", sql.Int, Number(complaintId))
+        .query(`
+          UPDATE call_technician_assignment
+          SET is_active = 0, unassigned_at = GETDATE()
+          WHERE call_id = @CallId AND is_active = 1
+        `);
+    }
+
+    // Insert new record in call_technician_assignment table
+    console.log(`📝 Creating new technician assignment record`);
+    try {
+      const insertResult = await pool.request()
+        .input("CallId", sql.Int, Number(complaintId))
+        .input("TechnicianId", sql.Int, Number(technicianId))
+        .input("AssignedByUserId", sql.Int, req.user?.id || null)
+        .input("AssignedReason", sql.NVarChar(50), assignmentReason || (isReallocation ? 'REALLOCATION' : 'INITIAL_ALLOCATION'))
+        .input("IsActive", sql.Bit, 1)
+        .query(`
+          INSERT INTO call_technician_assignment 
+          (call_id, technician_id, assigned_by_user_id, assigned_reason, assigned_at, is_active, created_at, updated_at)
+          VALUES 
+          (@CallId, @TechnicianId, @AssignedByUserId, @AssignedReason, GETDATE(), @IsActive, GETDATE(), GETDATE());
+          SELECT @@ROWCOUNT as rows_affected;
+        `);
+      
+      const rowsAffected = insertResult.recordset[0]?.rows_affected || 0;
+      if (rowsAffected === 0) {
+        console.error('❌ INSERT failed - no rows affected');
+        throw new Error('Failed to insert allocation record');
+      }
+      console.log(`✅ Allocation record inserted successfully (${rowsAffected} rows)`);
+    } catch (insertErr) {
+      console.error('❌ INSERT error:', insertErr.message);
+      throw insertErr;
+    }
+
+    // Update calls table with assigned technician and status
+    console.log(`🔗 Updating calls table with new technician and status`);
+    try {
+      const updateResult = await pool.request()
+        .input("CallId", sql.Int, Number(complaintId))
+        .input("TechnicianId", sql.Int, Number(technicianId))
+        .input("StatusId", sql.Int, statusId)
+        .query(`
+          UPDATE calls
+          SET 
+            assigned_tech_id = @TechnicianId, 
+            status_id = @StatusId, 
+            updated_at = GETDATE()
+          WHERE call_id = @CallId;
+          SELECT @@ROWCOUNT as rows_affected;
+        `);
+      
+      const rowsUpdated = updateResult.recordset[0]?.rows_affected || 0;
+      console.log(`✅ Calls table updated (${rowsUpdated} rows)`);
+    } catch (updateErr) {
+      console.error('❌ UPDATE error:', updateErr.message);
+      throw updateErr;
+    }
+
+    // Verify insertion
+    console.log(`\n🔎 Verifying insertion...`);
+    const verifyRes = await pool.request()
       .input("CallId", sql.Int, Number(complaintId))
-      .input("TechnicianId", sql.Int, Number(technicianId))
       .query(`
-        UPDATE calls
-        SET assigned_tech_id = @TechnicianId, updated_at = GETDATE()
+        SELECT TOP 3 id, technician_id, assigned_reason, is_active, assigned_at
+        FROM call_technician_assignment
+        WHERE call_id = @CallId
+        ORDER BY assigned_at DESC
+      `);
+    
+    console.log(`✅ Current allocation records for call ${complaintId}:`);
+    verifyRes.recordset.forEach((record, idx) => {
+      console.log(`   ${idx + 1}. ID: ${record.id}, Tech: ${record.technician_id}, Reason: ${record.assigned_reason}, Active: ${record.is_active}`);
+    });
+
+    // Get history count for this call
+    const historyRes = await pool.request()
+      .input("CallId", sql.Int, Number(complaintId))
+      .query(`
+        SELECT COUNT(*) as allocation_count
+        FROM call_technician_assignment
         WHERE call_id = @CallId
       `);
 
+    const allocationCount = historyRes.recordset[0].allocation_count;
+
     res.json({
-      message: `Technician ${technician.name} assigned successfully to complaint ${complaintId}`,
-      assignedTechnicianId: technician.technician_id,
-      assignedTechnicianName: technician.name,
+      success: true,
+      message: `Technician ${technician.name} ${isReallocation ? 're-' : ''}assigned successfully to call ${complaintId}`,
+      data: {
+        callId: complaintId,
+        assignedTechnicianId: technician.technician_id,
+        assignedTechnicianName: technician.name,
+        isReallocation: isReallocation,
+        previousTechnicianId: previousTechId || null,
+        status: statusName,
+        statusId: statusId,
+        assignmentHistory: {
+          totalAllocations: allocationCount,
+          allocationType: isReallocation ? 'RE-ALLOCATION' : 'INITIAL_ALLOCATION'
+        }
+      }
     });
 
   } catch (err) {
-    console.error("Assign tech error:", err);
-    res.status(500).json({ message: "Error assigning technician", error: err.message });
+    console.error("❌ Assign tech error:", err);
+    res.status(500).json({ 
+      success: false,
+      message: "Error assigning technician", 
+      error: err.message 
+    });
+  }
+});
+
+// ================== GET TECHNICIAN ALLOCATION HISTORY ==================
+router.get("/:id/allocation-history", optionalAuthenticate, async (req, res) => {
+  try {
+    const pool = await poolPromise;
+    const complaintId = req.params.id;
+
+    console.log(`📋 Fetching allocation history for call ${complaintId}`);
+
+    const historyRes = await pool.request()
+      .input("CallId", sql.Int, Number(complaintId))
+      .query(`
+        SELECT 
+          cta.id as allocation_id,
+          cta.call_id,
+          cta.technician_id,
+          t.name as technician_name,
+          t.mobile_no as technician_mobile,
+          cta.assigned_by_user_id,
+          u.username as assigned_by_username,
+          cta.assigned_reason,
+          cta.assigned_at,
+          cta.unassigned_at,
+          cta.is_active,
+          CASE 
+            WHEN cta.is_active = 1 THEN 'Active'
+            ELSE 'Inactive'
+          END as allocation_status,
+          cta.created_at,
+          cta.updated_at
+        FROM call_technician_assignment cta
+        LEFT JOIN technicians t ON t.technician_id = cta.technician_id
+        LEFT JOIN users u ON u.id = cta.assigned_by_user_id
+        WHERE cta.call_id = @CallId
+        ORDER BY cta.assigned_at DESC
+      `);
+
+    const history = historyRes.recordset || [];
+    console.log(`✅ Found ${history.length} allocation records`);
+
+    res.json({
+      success: true,
+      callId: complaintId,
+      allocationHistory: history,
+      totalAllocations: history.length,
+      currentAllocation: history.find(h => h.is_active) || null
+    });
+
+  } catch (err) {
+    console.error("❌ Error fetching allocation history:", err);
+    res.status(500).json({ 
+      success: false,
+      message: "Error fetching allocation history", 
+      error: err.message 
+    });
   }
 });
 

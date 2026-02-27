@@ -1,7 +1,9 @@
+import { getApiUrl } from '../config/apiConfig';
+
 export const getBranchDashboardApi = async () => {
   const token = localStorage.getItem('token');
   try {
-    const response = await fetch('/api/branch/dashboard', {
+    const response = await fetch(getApiUrl('/branch/dashboard'), {
       method: 'GET',
       headers: { 
         'Authorization': `Bearer ${token}`,
@@ -22,7 +24,7 @@ export const getBranchDashboardApi = async () => {
 export const getBranchesApi = async () => {
   const token = localStorage.getItem('token');
   try {
-    const response = await fetch('/api/branch/branches', {
+    const response = await fetch(getApiUrl('/branch/branches'), {
       method: 'GET',
       headers: { 
         'Authorization': `Bearer ${token}`,
@@ -49,7 +51,7 @@ export const getBranchesApi = async () => {
 export const getRsmBranchesApi = async () => {
   const token = localStorage.getItem('token');
   try {
-    const response = await fetch('/api/branch/rsm-branches', {
+    const response = await fetch(getApiUrl('/branch/rsm-branches'), {
       method: 'GET',
       headers: { 
         'Authorization': `Bearer ${token}`,
@@ -76,7 +78,7 @@ export const getRsmBranchesApi = async () => {
 export const getServiceCentersByBranchApi = async (branchId) => {
   const token = localStorage.getItem('token');
   try {
-    const response = await fetch(`/api/branch/service-centers?branchId=${branchId}`, {
+    const response = await fetch(getApiUrl(`/branch/service-centers?branchId=${branchId}`), {
       method: 'GET',
       headers: { 
         'Authorization': `Bearer ${token}`,
@@ -102,7 +104,7 @@ export const getServiceCentersByBranchApi = async (branchId) => {
 
 export const getBranchRequestsApi = async () => {
   const token = localStorage.getItem('token');
-  const response = await fetch('/api/branch/requests', {
+  const response = await fetch(getApiUrl('/branch/requests'), {
     headers: { Authorization: `Bearer ${token}` }
   });
   if (!response.ok) throw new Error('Failed to fetch branch requests');
@@ -111,7 +113,7 @@ export const getBranchRequestsApi = async () => {
 
 export const approveBranchRequestApi = async (requestId) => {
   const token = localStorage.getItem('token');
-  const response = await fetch(`/api/branch/requests/${requestId}/approve`, {
+  const response = await fetch(getApiUrl(`/branch/requests/${requestId}/approve`), {
     method: 'POST',
     headers: { Authorization: `Bearer ${token}` }
   });
@@ -121,7 +123,7 @@ export const approveBranchRequestApi = async (requestId) => {
 
 export const getBranchInventoryApi = async () => {
   const token = localStorage.getItem('token');
-  const response = await fetch('/api/branch/inventory', {
+  const response = await fetch(getApiUrl('/branch/inventory'), {
     headers: { Authorization: `Bearer ${token}` }
   });
   if (!response.ok) throw new Error('Failed to fetch branch inventory');
@@ -130,7 +132,7 @@ export const getBranchInventoryApi = async () => {
 
 export const adjustBranchInventoryApi = async (adjustData) => {
   const token = localStorage.getItem('token');
-  const response = await fetch('/api/branch/inventory/adjust', {
+  const response = await fetch(getApiUrl('/branch/inventory/adjust'), {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -145,7 +147,7 @@ export const adjustBranchInventoryApi = async (adjustData) => {
 export const getBranchReturnRequestsApi = async () => {
   const token = localStorage.getItem('token');
   try {
-    const response = await fetch('/api/returns/branch-requests', {
+    const response = await fetch(getApiUrl('/returns/branch-requests'), {
       method: 'GET',
       headers: { 
         'Authorization': `Bearer ${token}`,
@@ -166,7 +168,7 @@ export const getBranchReturnRequestsApi = async () => {
 
 export const getBranchReturnRequestDetailsApi = async (requestId) => {
   const token = localStorage.getItem('token');
-  const response = await fetch(`/api/branch/branch-requests/${requestId}/details`, {
+  const response = await fetch(getApiUrl(`/branch/branch-requests/${requestId}/details`), {
     headers: { Authorization: `Bearer ${token}` }
   });
   if (!response.ok) throw new Error('Failed to fetch request details');
@@ -175,7 +177,7 @@ export const getBranchReturnRequestDetailsApi = async (requestId) => {
 
 export const createSpareRequestApi = async (requestData) => {
   const token = localStorage.getItem('token');
-  const response = await fetch('/api/branch/spare-requests', {
+  const response = await fetch(getApiUrl('/branch/spare-requests'), {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',

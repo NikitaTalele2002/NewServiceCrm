@@ -227,6 +227,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { getApiUrl } from '../../config/apiConfig';
 
 const DCFStatus = () => {
   const [dcfData, setDcfData] = useState([]);
@@ -261,7 +262,7 @@ const DCFStatus = () => {
     setLoading(true);
     try {
       // First fetch all requests
-      const response = await fetch('/api/returns/service-center-requests', {
+      const response = await fetch(getApiUrl('/returns/service-center-requests'), {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
@@ -273,7 +274,7 @@ const DCFStatus = () => {
       // Then fetch details for each request to build DCF data
       const dcfPromises = requests.map(async (req) => {
         try {
-          const detailResponse = await fetch(`/api/returns/service-center-requests/${req.id}/details`, {
+          const detailResponse = await fetch(getApiUrl(`/returns/service-center-requests/${req.id}/details`), {
             headers: {
               'Authorization': `Bearer ${token}`,
               'Content-Type': 'application/json'

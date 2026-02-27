@@ -21,17 +21,23 @@ import branchInventoryCurrentRouter from "./routes/branch_inventory_current.js";
 import logisticsRoute from "./routes/logistics.js";
 import technicianSpareRequestsRoute from "./routes/technician-spare-requests.js";
 import technicianScSpareRequestsRoute from "./routes/technician-sc-spare-requests.js";
+import technicianSpareReturnsRoute from "./routes/technician-spare-returns.js";
 import spareReturnRequestsRoute from "./routes/spare-return-requests.js";
 import sparePartReturnsRoute from "./routes/sparePartReturns.js";
 import ascBranchRequestsRoute from "./routes/ascBranchRequests.js";
 import scBranchRequestsRoute from "./routes/scBranchRequests.js";
 import technicianTrackingRoute from "./routes/technician-tracking.js";
+import attachmentRoutes from "./routes/attachmentRoutes.js";
+import servicecenterRoute from "./routes/servicecenter.js";
 
 const app = express();
 
 // MIDDLEWARE
 app.use(cors());
 app.use(express.json());
+
+// Serve static files from uploads folder
+app.use('/uploads', express.static('uploads'));
 
 // TEST ROUTE
 app.get("/api/test", async (req, res) => {
@@ -66,6 +72,8 @@ app.use("/api/spare-requests", spareRequestsRoute);
 app.use("/api/technician-spare-requests", technicianSpareRequestsRoute);
 // Technician to Service Center spare requests (Rental Allocation workflow)
 app.use("/api/technician-sc-spare-requests", technicianScSpareRequestsRoute);
+// Technician spare returns (defective & unused spares after call completion)
+app.use("/api/technician-spare-returns", technicianSpareReturnsRoute);
 // ASC to Branch spare requests (return of defective/excess)
 app.use("/api/asc-branch-requests", ascBranchRequestsRoute);
 // Service Center to Branch spare requests
@@ -84,8 +92,8 @@ app.use('/api/inventory', inventoryRoute);
 // app.use("/api/returns", returnsRoute);
 // Technician status requests
 app.use("/api/technician-status-requests", technicianStatusRequestsRoute);
-// // Service center routes
-// app.use("/api/servicecenter", servicecenterRoute);
+// Service center routes
+app.use("/api/servicecenter", servicecenterRoute);
 // // Monthly claims / invoices
 // app.use("/api/monthly-claims", monthlyClaimsRoute);
 // Product hierarchy
@@ -97,6 +105,9 @@ app.use("/api/call-center", callCenterRoute);
 
 // Logistics & SAP Integration
 app.use("/api/logistics", logisticsRoute);
+
+// Attachments
+app.use("/api/attachments", attachmentRoutes);
 
 // SERVER
 const PORT = process.env.PORT || 5000;

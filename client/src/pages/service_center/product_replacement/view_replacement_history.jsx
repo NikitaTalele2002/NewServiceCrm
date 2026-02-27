@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { getApiUrl } from '../../../config/apiConfig';
 import { useReplacementHistory } from '../../../hooks/useProductReplacement';
 import ReplacementHistoryFilters from '../../../components/product_replacement/ReplacementHistoryFilters';
 import ReplacementHistoryTable from '../../../components/product_replacement/ReplacementHistoryTable';
@@ -24,7 +25,7 @@ export default function ViewReplacementHistory() {
     setModalLoading(true);
     try {
       const token = localStorage.getItem('token');
-      const res = await fetch(`/api/complaints/${item.callId}`, {
+      const res = await fetch(getApiUrl(`/complaints/${item.callId}`), {
         headers: { Authorization: `Bearer ${token}` }
       });
       if (res.ok) {

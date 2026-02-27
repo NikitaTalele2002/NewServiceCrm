@@ -1,5 +1,7 @@
+import { getApiUrl } from '../config/apiConfig';
+
 export const adminLoginApi = async (loginData) => {
-  const response = await fetch('/api/admin/login', {
+  const response = await fetch(getApiUrl('/admin/login'), {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json'
@@ -11,7 +13,7 @@ export const adminLoginApi = async (loginData) => {
 };
 
 export const adminRegisterApi = async (registerData) => {
-  const response = await fetch('/api/admin/register', {
+  const response = await fetch(getApiUrl('/admin/register'), {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json'
@@ -24,7 +26,7 @@ export const adminRegisterApi = async (registerData) => {
 
 export const getAdminProfileApi = async () => {
   const token = localStorage.getItem('token');
-  const response = await fetch('/api/admin/profile', {
+  const response = await fetch(getApiUrl('/admin/profile'), {
     headers: { Authorization: `Bearer ${token}` }
   });
   if (!response.ok) throw new Error('Failed to fetch profile');
@@ -33,7 +35,7 @@ export const getAdminProfileApi = async () => {
 
 export const getAllAdminsApi = async () => {
   const token = localStorage.getItem('token');
-  const response = await fetch('/api/admin/all', {
+  const response = await fetch(getApiUrl('/admin/all'), {
     headers: { Authorization: `Bearer ${token}` }
   });
   if (!response.ok) throw new Error('Failed to fetch admins');
@@ -42,7 +44,7 @@ export const getAllAdminsApi = async () => {
 
 export const getServiceCentersApi = async () => {
   const token = localStorage.getItem('token');
-  const response = await fetch('/api/admin/service-centres', {
+  const response = await fetch(getApiUrl('/admin/service-centres'), {
     headers: { Authorization: `Bearer ${token}` }
   });
   if (!response.ok) throw new Error('Failed to fetch service centers');
@@ -51,7 +53,7 @@ export const getServiceCentersApi = async () => {
 
 export const createServiceCenterApi = async (serviceCenterData) => {
   const token = localStorage.getItem('token');
-  const response = await fetch('/api/admin/service-centres', {
+  const response = await fetch(getApiUrl('/admin/service-centres'), {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -66,7 +68,7 @@ export const createServiceCenterApi = async (serviceCenterData) => {
 export const searchMasterDataApi = async (type, query) => {
   const token = localStorage.getItem('token');
   const params = new URLSearchParams({ type, q: query });
-  const response = await fetch(`/api/admin/search-master?${params.toString()}`, {
+  const response = await fetch(getApiUrl(`/admin/search-master?${params.toString()}`), {
     headers: { Authorization: `Bearer ${token}` }
   });
   if (!response.ok) throw new Error('Search failed');

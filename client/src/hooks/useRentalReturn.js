@@ -19,6 +19,7 @@ export const useRentalReturn = () => {
   const [debugInfo, setDebugInfo] = useState(null);
   const [approvalLoading, setApprovalLoading] = useState(false);
   const [approvalRemarks, setApprovalRemarks] = useState('');
+  const [approvedQtys, setApprovedQtys] = useState({});
 
   const token = localStorage.getItem('token');
   const serviceCenterId = localStorage.getItem('serviceCenterId');
@@ -225,7 +226,7 @@ export const useRentalReturn = () => {
   };
 
   // Handle return approval (NEW)
-  const handleApproveReturn = async () => {
+  const handleApproveReturn = async (approvedQtysData) => {
     if (!selectedReturn) {
       setError('No return selected');
       return;
@@ -235,11 +236,13 @@ export const useRentalReturn = () => {
     try {
       setError(null);
       console.log(`✅ Approving return request ${selectedReturn.id}...`);
+      console.log('Approved quantities:', approvedQtysData);
       
       const result = await rentalReturnService.approveReturnRequest(
         selectedReturn.id,
         token,
-        approvalRemarks
+        approvalRemarks,
+        approvedQtysData
       );
       
       console.log('✅ Return approved:', result);
@@ -251,6 +254,7 @@ export const useRentalReturn = () => {
       // Reset approval state and go back to list
       setSelectedReturn(null);
       setApprovalRemarks('');
+      setApprovedQtys({});
       setView('list');
     } catch (error) {
       console.error('Error approving return:', error);
@@ -291,7 +295,9 @@ export const useRentalReturn = () => {
     error,
     debugInfo,
     approvalRemarks,
+    approvedQtys,
     setApprovalRemarks,
+    setApprovedQtys,
     setSelectedRequest,
     setSelectedTechnician,
     setInventoryType,

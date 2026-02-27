@@ -1,6 +1,8 @@
+import { getApiUrl } from '../config/apiConfig';
+
 export const createComplaintApi = async (complaintData) => {
   const token = localStorage.getItem('token');
-  const response = await fetch('/api/complaints', {
+  const response = await fetch(getApiUrl('/complaints'), {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -15,7 +17,7 @@ export const createComplaintApi = async (complaintData) => {
 export const searchComplaintsApi = async (searchParams) => {
   const token = localStorage.getItem('token');
   const params = new URLSearchParams(searchParams);
-  const response = await fetch(`/api/complaints/search?${params.toString()}`, {
+  const response = await fetch(getApiUrl(`/complaints/search?${params.toString()}`), {
     headers: { Authorization: `Bearer ${token}` }
   });
   if (!response.ok) throw new Error('Failed to search complaints');
@@ -24,7 +26,7 @@ export const searchComplaintsApi = async (searchParams) => {
 
 export const getComplaintByIdApi = async (complaintId) => {
   const token = localStorage.getItem('token');
-  const response = await fetch(`/api/complaints/${complaintId}`, {
+  const response = await fetch(getApiUrl(`/complaints/${complaintId}`), {
     headers: { Authorization: `Bearer ${token}` }
   });
   if (!response.ok) throw new Error('Failed to fetch complaint');
@@ -33,7 +35,7 @@ export const getComplaintByIdApi = async (complaintId) => {
 
 export const updateComplaintApi = async (complaintId, updateData) => {
   const token = localStorage.getItem('token');
-  const response = await fetch(`/api/complaints/${complaintId}`, {
+  const response = await fetch(getApiUrl(`/complaints/${complaintId}`), {
     method: 'PUT',
     headers: {
       'Content-Type': 'application/json',
@@ -50,7 +52,7 @@ export const getComplaintsApi = async (centerId) => {
   
   // If centerId is provided, use the service center specific endpoint
   if (centerId) {
-    const response = await fetch(`/api/call-center/complaints/by-service-center/${encodeURIComponent(centerId)}`, {
+    const response = await fetch(getApiUrl(`/call-center/complaints/by-service-center/${encodeURIComponent(centerId)}`), {
       headers: { Authorization: `Bearer ${token}` }
     });
     if (!response.ok) throw new Error('Failed to fetch complaints for service center');
@@ -63,7 +65,7 @@ export const getComplaintsApi = async (centerId) => {
   }
   
   // For admin, fetch all complaints from the general endpoint (now with Sequelize)
-  const response = await fetch('/api/complaints', {
+  const response = await fetch(getApiUrl('/complaints'), {
     headers: { Authorization: `Bearer ${token}` }
   });
   if (!response.ok) throw new Error('Failed to fetch complaints');
@@ -77,16 +79,29 @@ export const getComplaintsApi = async (centerId) => {
   };
 };
 
-export const assignTechnicianApi = async (complaintId, technicianId, force = false) => {
+export const assignTechnicianApi = async (complaintId, technicianId, assignmentReason = null) => {
   const token = localStorage.getItem('token');
-  const response = await fetch('/api/complaints/assign-technician', {
+  const response = await fetch(getApiUrl('/complaints/assign-technician'), {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${token}`
     },
-    body: JSON.stringify({ complaintId, technicianId: Number(technicianId), force })
+    body: JSON.stringify({ 
+      complaintId, 
+      technicianId: Number(technicianId), 
+      assignmentReason: assignmentReason || null 
+    })
   });
   if (!response.ok) throw new Error('Failed to assign technician');
+  return await response.json();
+};
+
+export const getAllocationHistoryApi = async (complaintId) => {
+  const token = localStorage.getItem('token');
+  const response = await fetch(getApiUrl(`/complaints/${complaintId}/allocation-history`), {
+    headers: { Authorization: `Bearer ${token}` }
+  });
+  if (!response.ok) throw new Error('Failed to fetch allocation history');
   return await response.json();
 };

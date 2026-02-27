@@ -1,5 +1,6 @@
 // src/pages/service_center/ViewTechnicians.jsx
 import React, { useState, useEffect } from "react";
+import { getApiUrl } from "../../../config/apiConfig";
 
 export default function ViewTechnicians({ technicians = [], onEdit, onRemove }) {
   const [selectedTech, setSelectedTech] = useState(null);
@@ -8,7 +9,7 @@ export default function ViewTechnicians({ technicians = [], onEdit, onRemove }) 
 
   const loadTechnicianInventory = async (techId) => {
     try {
-      const response = await fetch(`/api/spare-requests/technicians/${techId}/inventory`, {
+      const response = await fetch(getApiUrl(`/spare-requests/technicians/${techId}/inventory`), {
         headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
       });
       if (response.ok) {

@@ -1,12 +1,13 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useRole } from '../../context/RoleContext';
+import { getApiUrl } from '../../config/apiConfig';
+import { useActionLog } from '../../hooks/useActionLog';
 import FormInput from '../../components/common/FormInput';
 import FilterSelect from '../../components/common/FilterSelect';
 import Button from '../../components/common/Button';
 import CallView from './CallView';
-import StatusBadge from '../../components/common/StatusBadge';
-import StatusTimeline from '../../components/common/StatusTimeline';
+import ActionLogDisplay from '../../components/call_view/ActionLogDisplay';
 
 // Safe date formatter utility
 const formatDate = (dateString) => {
@@ -29,6 +30,15 @@ const formatDate = (dateString) => {
 
 export default function CallUpdate() {
   const { role } = useRole();
+  const [searchParams] = useSearchParams();
+  const {
+    showActionLogModal,
+    setShowActionLogModal,
+    actionLogData,
+    loading: actionLogLoading,
+    handleActionLog: fetchActionLog
+  } = useActionLog();
+  
   const [filters, setFilters] = useState({
     name: '',
     mobileNo: '',
@@ -49,11 +59,6 @@ export default function CallUpdate() {
   const [showInventoryModal, setShowInventoryModal] = useState(false);
   const [inventoryData, setInventoryData] = useState([]);
   const [selectedSku, setSelectedSku] = useState('');
-  const [showActionLogModal, setShowActionLogModal] = useState(false);
-  const [actionLogData, setActionLogData] = useState([]);
-  const [showStatusHistoryModal, setShowStatusHistoryModal] = useState(false);
-  const [selectedStatusCallId, setSelectedStatusCallId] = useState(null);
-  const [searchParams] = useSearchParams();
 
   useEffect(() => {
     fetchAllCalls();
@@ -246,22 +251,7 @@ export default function CallUpdate() {
 
   const handleActionLog = async () => {
     if (selectedCallId) {
-      try {
-        const response = await fetch(`/api/complaints/${selectedCallId}/action-log`, {
-          headers: {
-            Authorization: `Bearer ${localStorage.getItem('token')}`
-          }
-        });
-        if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
-        }
-        const data = await response.json();
-        setActionLogData(data);
-        setShowActionLogModal(true);
-      } catch (error) {
-        console.error('Error fetching action log:', error);
-        alert('Failed to fetch action log data.');
-      }
+      await fetchActionLog(selectedCallId);
     } else {
       alert('Please select exactly one call.');
     }
@@ -270,7 +260,7 @@ export default function CallUpdate() {
   const handleViewInventory = async (sku) => {
     setSelectedSku(sku);
     try {
-      const response = await fetch(`/api/products/inventory?sku=${encodeURIComponent(sku)}`, {
+      const response = await fetch(getApiUrl(`/products/inventory?sku=${encodeURIComponent(sku)}`), {
         headers: {
           Authorization: `Bearer ${localStorage.getItem('token')}`
         }
@@ -292,28 +282,48 @@ export default function CallUpdate() {
       alert('Please select a call to cancel.');
       return;
     }
+    
+    const reason = prompt('Please provide reason for cancellation (DUPLICATE, RESOLVED, NO_RESPONSE, CUSTOMER_REQUEST, TECHNICAL_ISSUE, INVALID_DATA, OTHER):');
+    if (!reason) {
+      alert('Cancellation request cancelled.');
+      return;
+    }
+
     try {
-      await fetch(`/api/complaints/${selectedCallId}/cancel`, {
+      const response = await fetch(getApiUrl(`/call-center/complaints/${selectedCallId}/cancel`), {
         method: 'POST',
         headers: {
+          'Content-Type': 'application/json',
           Authorization: `Bearer ${localStorage.getItem('token')}`
-        }
+        },
+        body: JSON.stringify({
+          reason: reason.toUpperCase(),
+          remarks: `Cancellation requested by service center`
+        })
       });
-      alert('Cancellation request submitted.');
-      fetchCalls(filters); // Refresh data
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        // Handle specific error cases
+        if (response.status === 400 && data.error && data.error.includes('already pending')) {
+          alert('This call already has a pending cancellation request awaiting RSM approval.\n\nPlease wait for the RSM to approve or reject it.');
+          return;
+        }
+        if (response.status === 403) {
+          alert('Cancellation not allowed.\n\nReason: ' + (data.error || 'You do not have permission to cancel this call'));
+          return;
+        }
+        alert(`Error: ${data.error || 'Failed to request cancellation'}`);
+        return;
+      }
+
+      alert('Cancellation request submitted successfully. Awaiting RSM approval.');
+      fetchAllCalls(); // Refresh data
       setSelectedCallId(null);
     } catch (error) {
-      console.error('Error cancelling call:', error);
-      alert('Failed to cancel call.');
-    }
-  };
-
-  const handleViewStatusHistory = () => {
-    if (selectedCallId) {
-      setSelectedStatusCallId(selectedCallId);
-      setShowStatusHistoryModal(true);
-    } else {
-      alert('Please select a call to view status history.');
+      console.error('Error requesting cancellation:', error);
+      alert('Failed to request cancellation. Please check your connection and try again.');
     }
   };
 
@@ -454,7 +464,6 @@ export default function CallUpdate() {
                       <th className="px-2 py-2 text-left border">Product</th>
                       <th className="px-2 py-2 text-left border">Model</th>
                       <th className="px-2 py-2 text-left border">Serial No</th>
-                      <th className="px-2 py-2 text-left border">Status</th>
                       <th className="px-2 py-2 text-left border">Call Status</th>
                       <th className="px-2 py-2 text-left border">Stage</th>
                       <th className="px-2 py-2 text-left border">Technician</th>
@@ -488,9 +497,6 @@ export default function CallUpdate() {
                         </td>
                         <td className="px-2 py-2 border text-xs">{call.ProductSerialNo || '-'}</td>
                         <td className="px-2 py-2 border">
-                          <StatusBadge callId={call.ComplaintId} size="small" showIcon={true} />
-                        </td>
-                        <td className="px-2 py-2 border">
                           <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded text-xs">
                             {call.CallStatus || '-'}
                           </span>
@@ -503,7 +509,7 @@ export default function CallUpdate() {
                         <td className="px-2 py-2 border">
                           <button
                             onClick={() => handleSelectCall(call.ComplaintId)}
-                            className="px-2 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 text-xs">View
+                            className="px-2 py-1 bg-blue-500 text-black rounded hover:bg-blue-600 text-xs">View
                           </button>
                         </td>
                       </tr>
@@ -516,22 +522,35 @@ export default function CallUpdate() {
 
           {/* Action Buttons */}
           <div className="flex space-x-4 mt-6">
-            <button
-              onClick={handleCallView}
-              className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">Call View
-            </button>
-            <button
-              onClick={handleActionLog}
-              className="px-4 py-2 bg-green-600 text-black rounded hover:bg-green-700">Action Log
-            </button>
-            <button
-              onClick={handleViewStatusHistory}
-              className="px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700">View Status History
-            </button>
-            <button
-              onClick={handleRequestCancel}
-              className="px-4 py-2 bg-red-600 text-black rounded hover:bg-red-700">Request to Cancel
-            </button>
+            {/* Check if call is locked due to pending cancellation */}
+            {selectedCall?.StatusName === 'Pending Cancellation' && (
+              <div className="w-full p-3 bg-red-100 border-2 border-red-500 text-red-700 rounded font-bold">
+                ⚠️ CALL IS LOCKED: Pending Cancellation Request
+                <br />
+                <span className="text-sm">No other operations allowed until RSM approves or rejects the cancellation request.</span>
+              </div>
+            )}
+            {selectedCall?.StatusName !== 'Pending Cancellation' && (
+              <>
+                <button
+                  onClick={handleCallView}
+                  className="px-4 py-2 bg-blue-600 text-black rounded hover:bg-blue-700">Call View
+                </button>
+                <button
+                  onClick={handleActionLog}
+                  className="px-4 py-2 bg-green-600 text-black rounded hover:bg-green-700">Action Log
+                </button>
+                {role === 'service_center' && (
+                  <button
+                    onClick={handleRequestCancel}
+                    className="px-4 py-2 bg-red-600 text-black rounded hover:bg-red-700"
+                    title="Only Service Centers can request cancellation"
+                  >
+                    Request to Cancel
+                  </button>
+                )}
+              </>
+            )}
           </div>
         </div>
 
@@ -618,58 +637,12 @@ export default function CallUpdate() {
         )}
 
         {showActionLogModal && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-            <div className="bg-white p-6 rounded max-w-6xl max-h-screen overflow-auto">
-              <div className="flex justify-between items-center mb-4">
-                <h2 className="text-2xl font-bold">Action Log</h2>
-                <button onClick={() => setShowActionLogModal(false)} className="text-red-500 text-xl">×</button>
-              </div>
-              <div className="overflow-x-auto">
-                <table className="w-full border-collapse border border-gray-300">
-                  <thead className="bg-gray-100">
-                    <tr>
-                      <th className="border border-gray-300 px-4 py-2 text-left">Call ID</th>
-                      <th className="border border-gray-300 px-4 py-2 text-left">Action Date</th>
-                      <th className="border border-gray-300 px-4 py-2 text-left">Company</th>
-                      <th className="border border-gray-300 px-4 py-2 text-left">UserName</th>
-                      <th className="border border-gray-300 px-4 py-2 text-left">Status</th>
-                      <th className="border border-gray-300 px-4 py-2 text-left">Stage</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {actionLogData.map((item, index) => {
-                      // Use CallID and ActionDate to create unique key
-                      const itemKey = item.CallID && item.ActionDate 
-                        ? `${item.CallID}-${item.ActionDate}`
-                        : index;
-                      return (
-                      <tr key={itemKey} className="border-b border-gray-300">
-                        <td className="border border-gray-300 px-4 py-2">{item.CallID}</td>
-                        <td className="border border-gray-300 px-4 py-2">{formatDate(item.ActionDate)}</td>
-                        <td className="border border-gray-300 px-4 py-2">{item.Company}</td>
-                        <td className="border border-gray-300 px-4 py-2">{item.UserName}</td>
-                        <td className="border border-gray-300 px-4 py-2">{item.Status}</td>
-                        <td className="border border-gray-300 px-4 py-2">{item.Stage}</td>
-                      </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {showStatusHistoryModal && selectedStatusCallId && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-            <div className="bg-white p-6 rounded max-w-2xl max-h-screen overflow-auto w-full mx-4">
-              <div className="flex justify-between items-center mb-4">
-                <h2 className="text-2xl font-bold">Status History - Call ID: {selectedStatusCallId}</h2>
-                <button onClick={() => setShowStatusHistoryModal(false)} className="text-red-500 text-xl">×</button>
-              </div>
-              <StatusTimeline callId={selectedStatusCallId} />
-            </div>
-          </div>
+          <ActionLogDisplay
+            isOpen={showActionLogModal}
+            onClose={() => setShowActionLogModal(false)}
+            actionLogData={actionLogData}
+            loading={actionLogLoading}
+          />
         )}
       </div>
   );

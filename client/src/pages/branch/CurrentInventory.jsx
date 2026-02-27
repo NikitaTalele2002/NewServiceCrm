@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useRole } from '../../context/RoleContext';
 import { useNavigate } from 'react-router-dom';
+import { getApiUrl } from '../../config/apiConfig';
 import Button from '../../components/common/Button';
 
 export default function CurrentInventory() {
@@ -32,7 +33,7 @@ export default function CurrentInventory() {
             setLoading(false);
             return;
           }
-          const res = await fetch('/api/branch/assigned-plants', {
+          const res = await fetch(getApiUrl('/branch/assigned-plants'), {
             headers: { 'Authorization': `Bearer ${token}` }
           });
           const data = await res.json();
@@ -71,7 +72,7 @@ export default function CurrentInventory() {
       try {
         const token = localStorage.getItem('token');
         // Update the URL to match your backend route for branch/RSM inventory
-        let url = 'http://localhost:5000/api/branch/current-inventory';
+        let url = getApiUrl('/branch/current-inventory');
         let options = {
           headers: {
             ...(token ? { 'Authorization': `Bearer ${token}` } : {})

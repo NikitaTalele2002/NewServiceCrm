@@ -1,13 +1,30 @@
-import React from 'react';
+import React, { useState } from 'react';
+import StatusBadge from '../StatusBadge';
+import StatusHistoryModal from '../StatusHistoryModal';
 
 const CallInformation = ({ call, serviceCenterName, technicianName }) => {
+  const [showStatusHistory, setShowStatusHistory] = useState(false);
   return (
     <div className="mb-8">
       <h2 className="text-2xl font-semibold mb-4">Call Information</h2>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div className="bg-white p-4 rounded border border-gray-300">
           <p className="text-xs text-gray-600 font-semibold uppercase mb-1">Call Status</p>
-          <p className="text-gray-800 font-medium text-sm">{call.CallStatus || call.CallType || '-'}</p>
+          <button
+            onClick={() => setShowStatusHistory(true)}
+            className="hover:opacity-80 text-left w-full"
+            title="Click to view status history"
+          >
+            <StatusBadge
+              callId={call.CallId || call.ComplaintId || call.call_id}
+              status={call.Status}
+              subStatus={call.SubStatus}
+              showSubStatus={true}
+            />
+          </button>
+          <p className="text-xs text-blue-600 mt-2 cursor-pointer hover:underline" onClick={() => setShowStatusHistory(true)}>
+            View History →
+          </p>
         </div>
         <div className="bg-white p-4 rounded border border-gray-300">
           <p className="text-xs text-gray-600 font-semibold uppercase mb-1">Quantity</p>
@@ -84,6 +101,13 @@ const CallInformation = ({ call, serviceCenterName, technicianName }) => {
           </div>
         )}
       </div>
+
+      {/* Status History Modal */}
+      <StatusHistoryModal
+        callId={call.CallId || call.ComplaintId || call.call_id}
+        isOpen={showStatusHistory}
+        onClose={() => setShowStatusHistory(false)}
+      />
     </div>
   );
 };

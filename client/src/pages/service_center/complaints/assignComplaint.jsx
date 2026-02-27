@@ -210,15 +210,24 @@ export default function AssignComplaint() {
       || String(it.ComplaintId || '').toLowerCase().includes(q);
   });
 
-  async function handleAssignTechnician(complaintId, techId, force = false) {
+  async function handleAssignTechnician(complaintId, techId, assignmentReason = null) {
     try {
-      const result = await assignTechnician(complaintId, techId, force);
+      const result = await assignTechnician(complaintId, techId, assignmentReason);
       if (result.success) {
+        const allocationData = result.data.data || result.data;
+        const isReallocation = allocationData.isReallocation || false;
+        
+        // Update the reallocation map to show correct status
+        setReallocatedMap(prev => ({
+          ...prev,
+          [complaintId]: isReallocation
+        }));
+        
         alert(result.data.message || 'Assigned Successfully');
         // Clear selected map
         setSelectedMap(p => ({ ...p, [complaintId]: '' }));
+        
         // Refresh data after a short delay to let backend persist the change
-        // But don't block on it - let the immediate state update be visible first
         setTimeout(() => {
           fetchData();
         }, 2000); // Wait 2 seconds before refreshing

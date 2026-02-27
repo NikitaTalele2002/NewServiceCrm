@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 // import Navbar from "./navbar";
 import AddTechnician from "./add_technician";
-import ViewTechnicians from "./view_technician";
+import ViewTechnicians from "./view_technician.jsx";
 
 export default function Technicians() {
   const [showSection, setShowSection] = useState("view");

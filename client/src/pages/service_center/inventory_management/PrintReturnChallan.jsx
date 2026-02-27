@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { getApiUrl } from '../../../config/apiConfig';
 import './PrintReturnChallan.css';
 
 export default function PrintReturnChallan() {
@@ -17,7 +18,7 @@ export default function PrintReturnChallan() {
     const fetchChallan = async () => {
       setLoading(true);
       try {
-        const response = await fetch(`/api/spare-returns/challan/${requestId}`, {
+        const response = await fetch(getApiUrl(`/spare-returns/challan/${requestId}`), {
           headers: { Authorization: `Bearer ${token}` }
         });
 

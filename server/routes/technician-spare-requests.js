@@ -281,10 +281,12 @@ router.post('/create', authenticateToken, async (req, res) => {
     const requestResult = await sequelize.query(`
       INSERT INTO spare_requests (
         request_type,
+        spare_request_type,
         request_reason,
         requested_source_id,
         requested_source_type,
         requested_to_id,
+        requested_to_type,
         status_id,
         created_at,
         updated_at
@@ -292,10 +294,12 @@ router.post('/create', authenticateToken, async (req, res) => {
       OUTPUT inserted.request_id
       VALUES (
         ?,
+        'TECH_ISSUE',
         ?,
         ?,
         'technician',
         ?,
+        'service_center',
         ?,
         GETDATE(),
         GETDATE()
@@ -738,3 +742,4 @@ router.get('/service-center/inventory', authenticateToken, async (req, res) => {
 });
 
 export default router;
+

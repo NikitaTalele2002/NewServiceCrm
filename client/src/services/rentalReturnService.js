@@ -93,9 +93,9 @@ export const rentalReturnService = {
   },
 
   // Approve a pending return request
-  approveReturnRequest: async (requestId, token, approvalRemarks = '') => {
+  approveReturnRequest: async (requestId, token, approvalRemarks = '', approvedQtys = {}) => {
     try {
-      console.log(`📋 Approving return request ${requestId}`, { approvalRemarks });
+      console.log(`📋 Approving return request ${requestId}`, { approvalRemarks, approvedQtys });
       const response = await fetch(`${API_BASE}/${requestId}/approve-return`, {
         method: 'POST',
         headers: {
@@ -103,7 +103,8 @@ export const rentalReturnService = {
           'Authorization': `Bearer ${token}`
         },
         body: JSON.stringify({ 
-          approvalRemarks
+          approvalRemarks,
+          approvedQtys
         })
       });
       

@@ -1,8 +1,8 @@
 import express from 'express';
 import { sequelize } from '../db.js';
-import { SpareRequest, SpareRequestItem, Status, Users, Approvals, SpareInventory, StockMovement, ServiceCenter } from '../models/index.js';
+import { SpareRequest, SpareRequestItem, Status, Users, Approvals, SpareInventory, StockMovement, ServiceCenter, SparePartMSL } from '../models/index.js';
 import { authenticateToken, optionalAuthenticate } from '../middleware/auth.js';
-import { QueryTypes } from 'sequelize';
+import { QueryTypes, Op } from 'sequelize';
 import { determineRequestType, getRequestTypeDescription } from '../utils/requestTypeHelper.js';
 import {
   processMovement,
@@ -125,7 +125,11 @@ router.get('/', authenticateToken, async (req, res) => {
     // Original logic for other status types
     const where = {
       requested_source_type: 'service_center',
-      requested_source_id: parseInt(centerId)
+      requested_source_id: parseInt(centerId),
+      // Only show consignment fillup orders (bulk, msl)
+      request_reason: {
+        [Op.in]: ['bulk', 'msl']
+      }
     };
 
     if (status) {
@@ -135,8 +139,8 @@ router.get('/', authenticateToken, async (req, res) => {
 
     if (dateFrom || dateTo) {
       where.created_at = {};
-      if (dateFrom) where.created_at[sequelize.Op.gte] = new Date(dateFrom);
-      if (dateTo) where.created_at[sequelize.Op.lte] = new Date(dateTo);
+      if (dateFrom) where.created_at[Op.gte] = new Date(dateFrom);
+      if (dateTo) where.created_at[Op.lte] = new Date(dateTo);
     }
 
     const requests = await SpareRequest.findAll({
@@ -278,29 +282,105 @@ router.post('/', authenticateToken, async (req, res) => {
       console.warn('⚠️ Could not determine/create status row, continuing with status_id null', e && e.message);
     }
 
-    // Find plant_id for this service center (asc_id)
+    // Find plant_id and city_tier_id for this service center (asc_id)
     console.log('🔍 Looking up ServiceCenter with centerId:', centerId);
     const sc = await ServiceCenter.findByPk(centerId);
-    console.log('✅ ServiceCenter lookup result:', { found: !!sc, plantId: sc?.plant_id });
+    console.log('✅ ServiceCenter lookup result:', { found: !!sc, plantId: sc?.plant_id, cityId: sc?.city_id });
     
     if (!sc || !sc.plant_id) {
       console.error('❌ ServiceCenter validation failed:', { sc, plantId: sc?.plant_id });
       return res.status(400).json({ error: 'No plant_id found for this service center. Cannot submit request.' });
     }
 
-    console.log('📦 Creating SpareRequest with type:', determineRequestType('msl'));
-    const requestType = determineRequestType('msl');
+    // Get city_tier_id from the service center's city
+    let cityTierId = null;
+    if (sc.city_id) {
+      try {
+        const cityRow = await sequelize.query(
+          'SELECT city_tier_id FROM Cities WHERE Id = ?',
+          {
+            replacements: [sc.city_id],
+            type: QueryTypes.SELECT
+          }
+        );
+        if (cityRow.length > 0) {
+          cityTierId = cityRow[0].city_tier_id;
+          console.log('✅ City tier resolved:', { cityTierId });
+        }
+      } catch (err) {
+        console.warn('⚠️ Could not resolve city tier:', err.message);
+      }
+    }
+
+    // Determine if this is MSL or BULK request by checking stock levels
+    console.log('📊 Determining request reason (MSL vs BULK)...');
+    let isMSLRequest = false;
+    const stockCheckResults = [];
+
+    for (const item of items) {
+      const { sparePartId } = item;
+      
+      try {
+        // Get MSL for this spare part and city tier
+        const msl = await SparePartMSL.findOne({
+          where: {
+            spare_part_id: sparePartId,
+            city_tier_id: cityTierId,
+            is_active: true,
+            effective_from: { [Op.lte]: new Date() },
+            [Op.or]: [
+              { effective_to: null },
+              { effective_to: { [Op.gte]: new Date() } }
+            ]
+          }
+        });
+
+        // Get current stock
+        const currentStock = await SpareInventory.findOne({
+          where: {
+            spare_id: sparePartId,
+            location_id: centerId,
+            location_type: 'service_center'
+          }
+        });
+
+        const currentQty = currentStock?.qty_good || 0;
+        const minLevel = msl?.minimum_stock_level_qty || 0;
+        const isStockLow = currentQty <= minLevel;
+
+        console.log(`  Spare ${sparePartId}: Current=${currentQty}, MSL Min=${minLevel}, IsLow=${isStockLow}`);
+        stockCheckResults.push({
+          sparePartId,
+          currentQty,
+          minLevel,
+          isStockLow
+        });
+
+        if (isStockLow) {
+          isMSLRequest = true;
+        }
+      } catch (err) {
+        console.warn(`⚠️ Could not check MSL for spare ${sparePartId}:`, err.message);
+        // Continue even if check fails
+      }
+    }
+
+    const requestReason = isMSLRequest ? 'msl' : 'bulk';
+    console.log(`✅ Request reason determined: ${requestReason.toUpperCase()} (${isMSLRequest ? 'stock below MSL' : 'general replenishment'})`);
+
+    console.log('📦 Creating SpareRequest with type:', determineRequestType(requestReason));
+    const requestType = determineRequestType(requestReason);
     const legacyType = SPARE_REQUEST_TYPE_TO_LEGACY_TYPE[requestType] || 'consignment_fillup';
     
     const newRequest = await SpareRequest.create({
       request_type: legacyType, // Legacy field for backward compatibility
-      spare_request_type: requestType, // Business intent: MSL replenishment
+      spare_request_type: requestType, // Business intent: MSL or BULK replenishment
       call_id: null,
       requested_source_type: 'service_center',
       requested_source_id: parseInt(centerId),
       requested_to_type: 'plant', // destination is plant (location) 
       requested_to_id: sc.plant_id, // use plant_id for correct routing
-      request_reason: 'msl', // for MSL (Minimum Stock Level)
+      request_reason: requestReason, // 'msl' if stock low, 'bulk' otherwise
       status_id: statusRow ? statusRow.status_id : null, // resolved status id
       created_by: userId
     });
@@ -327,6 +407,16 @@ router.post('/', authenticateToken, async (req, res) => {
     console.log('✅ Order request completed successfully');
     res.status(201).json({
       message: `Spare request created with ${requestItems.length} item(s)`,
+      spare_request: {
+        request_id: newRequest.request_id,
+        requestId: `REQ-${newRequest.request_id}`,
+        request_reason: requestReason,
+        spare_request_type: requestType,
+        request_type: legacyType,
+        itemCount: requestItems.length,
+        status: 'pending',
+        stock_check_results: stockCheckResults // Include stock check details for debugging
+      },
       request: {
         requestId: `REQ-${newRequest.request_id}`,
         id: newRequest.request_id,
@@ -504,7 +594,9 @@ router.get('/returns/pending', authenticateToken, async (req, res) => {
 
     console.log(`📋 Fetching pending return requests for service center ${serviceCenterId}`);
 
-    // Get pending returns (status='pending', type='replacement' from technicians)
+    // Get pending returns - includes both rental returns AND spare part returns
+    // Rental returns: request_reason = 'replacement'
+    // Spare part returns: spare_request_type IN ('TECH_RETURN_DEFECTIVE', 'TECH_RETURN_EXCESS')
     const returns = await sequelize.query(`
       SELECT 
         sr.request_id as id,
@@ -516,6 +608,7 @@ router.get('/returns/pending', authenticateToken, async (req, res) => {
         s.status_name as status,
         sr.request_type,
         sr.request_reason,
+        sr.spare_request_type,
         sr.created_at,
         sr.updated_at
       FROM spare_requests sr
@@ -523,8 +616,8 @@ router.get('/returns/pending', authenticateToken, async (req, res) => {
       LEFT JOIN status s ON sr.status_id = s.status_id
       WHERE sr.requested_to_id = ?
         AND sr.requested_source_type = 'technician'
-        AND sr.request_reason = 'replacement'
-        AND s.status_name = 'pending'
+        AND LOWER(s.status_name) = 'pending'
+        AND (sr.request_reason = 'replacement' OR sr.spare_request_type IN ('TECH_RETURN_DEFECTIVE', 'TECH_RETURN_EXCESS'))
       ORDER BY sr.created_at DESC
     `, {
       replacements: [serviceCenterId],
@@ -562,6 +655,7 @@ router.get('/returns/pending', authenticateToken, async (req, res) => {
           statusId: ret.statusId,
           createdAt: ret.created_at,
           updatedAt: ret.updated_at,
+          returnType: ret.spare_request_type || ret.request_reason, // Show type or reason
           itemCount: items.length,
           items: items.map(item => ({
             id: item.id,
@@ -749,7 +843,7 @@ router.get('/technicians/:id/inventory', optionalAuthenticate, async (req, res) 
  */
 router.post('/return', optionalAuthenticate, async (req, res) => {
   try {
-    const { returns, technicianId } = req.body;
+    const { returns, technicianId, returnType } = req.body;
     
     if (!returns || !Array.isArray(returns) || returns.length === 0) {
       return res.status(400).json({ error: 'Returns array is required' });
@@ -759,7 +853,17 @@ router.post('/return', optionalAuthenticate, async (req, res) => {
       return res.status(400).json({ error: 'Technician ID is required' });
     }
 
+    // Determine return type and reason dynamically
+    const validReturnTypes = ['TECH_RETURN_DEFECTIVE', 'TECH_RETURN_EXCESS'];
+    const finalReturnType = returnType && validReturnTypes.includes(returnType) 
+      ? returnType 
+      : 'TECH_RETURN_DEFECTIVE'; // Default to defective
+    
+    // Dynamic reason based on return type
+    const requestReason = finalReturnType === 'TECH_RETURN_EXCESS' ? 'excess' : 'defect';
+
     console.log(`📤 Creating rental return request from technician ${technicianId}`);
+    console.log(`   Type: ${finalReturnType}, Reason: ${requestReason}`);
 
     // Get technician's assigned service center
     const [techResult] = await sequelize.query(`
@@ -847,11 +951,13 @@ router.post('/return', optionalAuthenticate, async (req, res) => {
       // Create return request with PENDING status (not approved)
       const [returnRequestResult] = await sequelize.query(`
         INSERT INTO spare_requests 
-        (request_type, request_reason, requested_source_type, requested_source_id, 
+        (request_type, spare_request_type, request_reason, requested_source_type, requested_source_id, 
          requested_to_type, requested_to_id, status_id, created_at, updated_at)
-        VALUES ('normal', 'replacement', 'technician', ?, 'service_center', ?, ?, GETDATE(), GETDATE())
+        VALUES ('consignment_return', ?, ?, 'technician', ?, 'service_center', ?, ?, GETDATE(), GETDATE())
       `, {
         replacements: [
+          finalReturnType,
+          requestReason,
           technicianId,
           serviceCenterId,
           statusId
@@ -932,7 +1038,7 @@ router.post('/:requestId/approve-return', authenticateToken, async (req, res) =>
   const transaction = await sequelize.transaction();
   try {
     const { requestId } = req.params;
-    const { approvalRemarks } = req.body || {};
+    const { approvalRemarks, approvedQtys = {} } = req.body || {};
     const serviceCenterId = req.user?.centerId || req.user?.service_center_id;
     const approverId = req.user?.id;
 
@@ -948,6 +1054,7 @@ router.post('/:requestId/approve-return', authenticateToken, async (req, res) =>
 
     console.log(`\n✅ STARTING APPROVAL PROCESS for return request ${requestId}`);
     console.log(`   Service Center: ${serviceCenterId}, Approver: ${approverId}`);
+    console.log(`   Approved Quantities:`, approvedQtys);
 
     // Get the return request and validate it
     const [returnRequest] = await sequelize.query(`
@@ -1045,10 +1152,12 @@ router.post('/:requestId/approve-return', authenticateToken, async (req, res) =>
     console.log(`\n2️⃣ CREATING STOCK MOVEMENT`);
     
     try {
-      // Insert stock movement and get the ID back
+      // Insert stock movement with correct column names
       const movementQuery = `
         INSERT INTO stock_movement (
-          movement_type,
+          stock_movement_type,
+          bucket,
+          bucket_operation,
           reference_type,
           reference_no,
           source_location_type,
@@ -1063,7 +1172,9 @@ router.post('/:requestId/approve-return', authenticateToken, async (req, res) =>
           updated_at
         )
         VALUES (
-          'return',
+          'TECH_RETURN_DEFECTIVE',
+          'GOOD',
+          'INCREASE',
           'return_request',
           'RET-' + CAST(? AS VARCHAR),
           'technician',
@@ -1113,55 +1224,66 @@ router.post('/:requestId/approve-return', authenticateToken, async (req, res) =>
     // STEP 3: Process each item
     console.log(`\n3️⃣ PROCESSING ITEMS AND UPDATING INVENTORY`);
     
-    for (const item of items) {
+    for (let itemIdx = 0; itemIdx < items.length; itemIdx++) {
       try {
+        const item = items[itemIdx];
         const { id, spare_id, requested_qty, PART, DESCRIPTION } = item;
 
-        console.log(`\n   Item ${id}: ${PART} (${DESCRIPTION})`);
+        // Get approved qty from frontend data, or use requested_qty if not provided
+        const approvedQty = approvedQtys[itemIdx] !== undefined ? Math.min(approvedQtys[itemIdx], requested_qty) : requested_qty;
 
-        // 3a. Update spare_request_items - set approved_qty to requested_qty
+        if (approvedQty <= 0) {
+          console.log(`\n   Item ${id}: ${PART} (${DESCRIPTION})`);
+          console.log(`      ⏭️  Skipped - No quantities approved (0/${requested_qty})`);
+          continue;
+        }
+
+        console.log(`\n   Item ${id}: ${PART} (${DESCRIPTION})`);
+        console.log(`      Approved: ${approvedQty}/${requested_qty} units`);
+
+        // 3a. Update spare_request_items - set approved_qty to the user-approved quantity
         await sequelize.query(`
           UPDATE spare_request_items
           SET approved_qty = ?, updated_at = GETDATE()
           WHERE id = ?
         `, {
-          replacements: [requested_qty, id],
+          replacements: [approvedQty, id],
           type: QueryTypes.UPDATE,
           transaction
         });
-        console.log(`      ✓ Updated approved_qty = ${requested_qty}`);
+        console.log(`      ✓ Updated approved_qty = ${approvedQty}`);
 
-        // 3b. Create goods_movement_items
+        // 3b. Create goods_movement_items (use approved qty, not requested qty)
         try {
           const gmiInsert = await sequelize.query(`
             INSERT INTO goods_movement_items (movement_id, spare_part_id, qty, condition, created_at, updated_at)
             VALUES (?, ?, ?, 'good', GETDATE(), GETDATE())
           `, {
-            replacements: [movementId, spare_id, requested_qty],
+            replacements: [movementId, spare_id, approvedQty],
             type: QueryTypes.INSERT,
             transaction
           });
-          console.log(`      ✓ Created goods_movement_item: ${requested_qty} units`, {
+          console.log(`      ✓ Created goods_movement_item: ${approvedQty} units`, {
             movementId,
             spareId: spare_id,
-            qty: requested_qty
+            qty: approvedQty
           });
         } catch (gmiErr) {
           console.error(`      ❌ Error creating goods_movement_item:`, gmiErr.message);
           throw gmiErr;
         }
 
-        // 3c. Reduce technician inventory (from technician location)
+        // 3c. Reduce technician inventory (from technician location) - use approved qty
         const techUpdateResult = await sequelize.query(`
           UPDATE spare_inventory
           SET qty_good = qty_good - ?, updated_at = GETDATE()
           WHERE spare_id = ? AND location_type = 'technician' AND location_id = ?
         `, {
-          replacements: [requested_qty, spare_id, technicianId],
+          replacements: [approvedQty, spare_id, technicianId],
           type: QueryTypes.UPDATE,
           transaction
         });
-        console.log(`      ✓ Technician inventory reduced: -${requested_qty}`);
+        console.log(`      ✓ Technician inventory reduced: -${approvedQty}`);
 
         // 3d. Increase service center inventory (add to service center location)
         const [scInvCheck] = await sequelize.query(`
@@ -1180,22 +1302,22 @@ router.post('/:requestId/approve-return', authenticateToken, async (req, res) =>
             SET qty_good = qty_good + ?, updated_at = GETDATE()
             WHERE spare_id = ? AND location_type = 'service_center' AND location_id = ?
           `, {
-            replacements: [requested_qty, spare_id, serviceCenterId],
+            replacements: [approvedQty, spare_id, serviceCenterId],
             type: QueryTypes.UPDATE,
             transaction
           });
-          console.log(`      ✓ Service center inventory updated: +${requested_qty}`);
+          console.log(`      ✓ Service center inventory updated: +${approvedQty}`);
         } else {
           // Create new SC inventory
           await sequelize.query(`
             INSERT INTO spare_inventory (spare_id, location_type, location_id, qty_good, qty_defective, created_at, updated_at)
             VALUES (?, 'service_center', ?, ?, 0, GETDATE(), GETDATE())
           `, {
-            replacements: [spare_id, serviceCenterId, requested_qty],
+            replacements: [spare_id, serviceCenterId, approvedQty],
             type: QueryTypes.INSERT,
             transaction
           });
-          console.log(`      ✓ Service center inventory created: +${requested_qty}`);
+          console.log(`      ✓ Service center inventory created: +${approvedQty}`);
         }
 
         processedCount++;

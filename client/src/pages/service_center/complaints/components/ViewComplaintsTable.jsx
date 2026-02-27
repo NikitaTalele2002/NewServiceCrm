@@ -1,4 +1,6 @@
-import React from 'react';
+import React, { useState } from 'react';
+import StatusBadge from '../../../../components/StatusBadge';
+import StatusHistoryModal from '../../../../components/StatusHistoryModal';
 
 const ViewComplaintsTable = ({
   role,
@@ -16,6 +18,8 @@ const ViewComplaintsTable = ({
   getModelName
 }) => {
   const isAdmin = role === 'admin';
+  const [selectedCallId, setSelectedCallId] = useState(null);
+  const [showHistoryModal, setShowHistoryModal] = useState(false);
 
   return (
     <div className="w-full min-h-screen bg-gray-50 p-6">
@@ -74,9 +78,21 @@ const ViewComplaintsTable = ({
                         </span>
                       </td>
                       <td className="px-4 py-3 text-sm">
-                        <span className="px-2 py-1 rounded-full text-xs font-semibold bg-yellow-100 text-yellow-800">
-                          {callStatus}
-                        </span>
+                        <button
+                          onClick={() => {
+                            setSelectedCallId(row.ComplaintId || row.call_id);
+                            setShowHistoryModal(true);
+                          }}
+                          className="hover:opacity-80 cursor-pointer"
+                          title="Click to view status history"
+                        >
+                          <StatusBadge
+                            callId={row.ComplaintId || row.call_id}
+                            status={row.Status}
+                            subStatus={row.SubStatus}
+                            showSubStatus={true}
+                          />
+                        </button>
                       </td>
                       {isAdmin && (
                         <td className="px-4 py-3 text-sm text-gray-700">{row.AssignedCenterId || row.assigned_asc_id || '-'}</td>
@@ -145,6 +161,16 @@ const ViewComplaintsTable = ({
           </p>
         </div>
       )}
+
+      {/* Status History Modal */}
+      <StatusHistoryModal
+        callId={selectedCallId}
+        isOpen={showHistoryModal}
+        onClose={() => {
+          setShowHistoryModal(false);
+          setSelectedCallId(null);
+        }}
+      />
     </div>
   );
 };

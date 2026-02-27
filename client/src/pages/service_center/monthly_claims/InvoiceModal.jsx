@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
+import { getApiUrl } from '../../../config/apiConfig';
 import Button from '../../../components/common/Button';
 
 export default function InvoiceModal({ open, onClose, params }) {
@@ -29,7 +30,7 @@ export default function InvoiceModal({ open, onClose, params }) {
           invoiceDate: invoiceDate || '',
           complaints: complaints || '',
         });
-        const res = await fetch(`/api/monthly-claims/invoice?${query.toString()}`);
+        const res = await fetch(getApiUrl(`/monthly-claims/invoice?${query.toString()}`));
         if (!res.ok) throw new Error(`Server returned ${res.status}`);
         const data = await res.json();
         setInvoiceData(data);

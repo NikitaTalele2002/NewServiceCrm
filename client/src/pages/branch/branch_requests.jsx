@@ -12,7 +12,7 @@ export default function BranchRequests() {
   useEffect(() => {
     const fetchRequests = async () => {
       try {
-        const res = await fetch("http://localhost:5000/api/branch/branch-requests", {
+        const res = await fetch(getApiUrl('/branch/branch-requests'), {
           headers: authHeader(),
         });
         const data = await res.json();

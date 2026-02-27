@@ -1,8 +1,8 @@
-import SparePartReturnRequest from '../pages/service_center/inventory_management/SparePartReturnRequest';
-import ViewCart from '../pages/service_center/inventory_management/ViewCart';
-import ReturnCart from '../pages/service_center/inventory_management/ReturnCart';
-import PrintReturnChallan from '../pages/service_center/inventory_management/PrintReturnChallan';
-import RSMReturnApproval from '../pages/rsm/RSMReturnApproval';
+import SparePartReturnRequest from '../pages/service_center/inventory_management/SparePartReturnRequest.jsx';
+import ViewCart from '../pages/service_center/inventory_management/ViewCart.jsx';
+import ReturnCart from '../pages/service_center/inventory_management/ReturnCart.jsx';
+import PrintReturnChallan from '../pages/service_center/inventory_management/PrintReturnChallan.jsx';
+import RSMReturnApproval from '../pages/rsm/RSMReturnApproval.jsx';
 
 /**
  * Spare Part Return Request Routes

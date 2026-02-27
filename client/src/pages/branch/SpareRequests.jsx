@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { getApiUrl } from '../../config/apiConfig';
 import Button from '../../components/common/Button';
 import { useBranch } from '../../hooks/useBranch';
 
@@ -140,7 +141,7 @@ export default function SpareRequests() {
                   setApproving(true);
                   try {
                     const token = localStorage.getItem('token');
-                    const res = await fetch(`/api/spare-requests/${selected.Id}/reject`, {
+                    const res = await fetch(getApiUrl(`/spare-requests/${selected.Id}/reject`), {
                       method: 'POST',
                       headers: {
                         'Authorization': `Bearer ${token}`,

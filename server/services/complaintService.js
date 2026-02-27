@@ -148,18 +148,20 @@ async function listComplaints({ centerId, user }){
   return { complaints, technicians: techResult.recordset };
 }
 
-async function assignTechnician({ complaintId, technicianId }){
+async function assignTechnician({ complaintId, technicianId, assignmentReason }){
   if(!complaintId || !technicianId) throw Object.assign(new Error('Missing complaintId or technicianId'), { status: 400 });
   const pool = await poolPromise;
   
   // Query from calls table instead of ComplaintRegistration
   const complaintRes = await pool.request()
     .input('ComplaintId', sql.NVarChar, String(complaintId))
-    .query('SELECT call_id, assigned_asc_id, status_id FROM calls WHERE call_id = @ComplaintId');
+    .query('SELECT call_id, assigned_asc_id, assigned_tech_id, status_id FROM calls WHERE call_id = @ComplaintId');
   
   if(!complaintRes.recordset.length) throw Object.assign(new Error('Complaint not found'), { status: 404 });
   
   const assignedCenterId = complaintRes.recordset[0].assigned_asc_id;
+  const previousTechId = complaintRes.recordset[0].assigned_tech_id;
+  
   if(!assignedCenterId) throw Object.assign(new Error("Complaint is not assigned to any service center"), { status: 400 });
 
   // Query technician from technicians table
@@ -172,12 +174,96 @@ async function assignTechnician({ complaintId, technicianId }){
   const technician = techRes.recordset[0];
   if(String(technician.service_center_id) !== String(assignedCenterId)) throw Object.assign(new Error('Technician is not allocated at this complaint\'s service center'), { status: 403 });
 
+  // Check if this is a reallocation (technician already assigned and different from new one)
+  const isReallocation = previousTechId && previousTechId !== technicianId;
+  console.log(`ℹ️ Allocation type: ${isReallocation ? 'RE-ALLOCATION' : 'INITIAL_ALLOCATION'}`);
+
+  // Get or create status for allocation/reallocation with specific IDs
+  const statusName = isReallocation ? 'Re-Allocated' : 'Allocated';
+  const expectedStatusId = isReallocation ? 15 : 14;
+  
+  let statusRes = await pool.request()
+    .input("StatusName", sql.NVarChar(100), statusName)
+    .query(`SELECT status_id FROM status WHERE status_name = @StatusName`);
+
+  let statusId = statusRes.recordset.length > 0 ? statusRes.recordset[0].status_id : null;
+
+  if (!statusId) {
+    // Create status with specific ID if it doesn't exist
+    console.log(`📌 Creating new status: '${statusName}' with ID ${expectedStatusId}`);
+    try {
+      await pool.request()
+        .input("StatusId", sql.Int, expectedStatusId)
+        .input("StatusName", sql.NVarChar(100), statusName)
+        .query(`
+          SET IDENTITY_INSERT status ON;
+          INSERT INTO status (status_id, status_name, created_at, updated_at)
+          VALUES (@StatusId, @StatusName, GETDATE(), GETDATE());
+          SET IDENTITY_INSERT status OFF;
+        `);
+      statusId = expectedStatusId;
+    } catch (err) {
+      // If ID already exists, just fetch it
+      console.log(`⚠️ Status ID ${expectedStatusId} already exists, fetching...`);
+      const fetchRes = await pool.request()
+        .input("StatusId", sql.Int, expectedStatusId)
+        .query(`SELECT status_id FROM status WHERE status_id = @StatusId`);
+      if (fetchRes.recordset.length > 0) {
+        statusId = expectedStatusId;
+      } else {
+        throw new Error(`Failed to create or find status '${statusName}'`);
+      }
+    }
+  }
+
+  console.log(`📍 Using status ID: ${statusId} for '${statusName}'`);
+
+  // If this is a reallocation, mark the previous assignment as inactive
+  if (isReallocation && previousTechId) {
+    console.log(`🔄 Marking previous assignment as inactive`);
+    await pool.request()
+      .input("CallId", sql.Int, Number(complaintId))
+      .query(`
+        UPDATE call_technician_assignment
+        SET is_active = 0, unassigned_at = GETDATE()
+        WHERE call_id = @CallId AND is_active = 1
+      `);
+  }
+
+  // Insert new record in call_technician_assignment table
+  console.log(`📝 Creating new technician assignment record`);
+  try {
+    const insertResult = await pool.request()
+      .input("CallId", sql.Int, Number(complaintId))
+      .input("TechnicianId", sql.Int, Number(technicianId))
+      .input("AssignedByUserId", sql.Int, 1) // System user
+      .input("AssignedReason", sql.NVarChar(50), isReallocation ? 'REALLOCATION' : 'INITIAL_ALLOCATION')
+      .input("IsActive", sql.Bit, 1)
+      .query(`
+        INSERT INTO call_technician_assignment 
+        (call_id, technician_id, assigned_by_user_id, assigned_reason, assigned_at, is_active, created_at, updated_at)
+        VALUES 
+        (@CallId, @TechnicianId, @AssignedByUserId, @AssignedReason, GETDATE(), @IsActive, GETDATE(), GETDATE());
+        SELECT @@ROWCOUNT as rows_affected;
+      `);
+    
+    const rowsAffected = insertResult.recordset[0]?.rows_affected || 0;
+    if (rowsAffected === 0) {
+      console.error('❌ INSERT failed - no rows affected');
+      throw new Error('Failed to insert allocation record');
+    }
+    console.log(`✅ Allocation record inserted successfully (${rowsAffected} rows)`);
+  } catch (insertErr) {
+    console.error('❌ INSERT error:', insertErr.message);
+    throw insertErr;
+  }
+
   // Get "assigned to the technician" sub-status
   let subStatusId = null;
   try {
-    const statusId = complaintRes.recordset[0].status_id;
+    const statusIdForSubStatus = complaintRes.recordset[0].status_id;
     const subStatusRes = await pool.request()
-      .input('StatusId', sql.Int, statusId)
+      .input('StatusId', sql.Int, statusIdForSubStatus)
       .query(`SELECT TOP 1 sub_status_id FROM sub_status 
               WHERE status_id = @StatusId AND LOWER(sub_status_name) = LOWER('assigned to the technician')`);
     
@@ -188,14 +274,43 @@ async function assignTechnician({ complaintId, technicianId }){
     console.warn('Error getting sub-status for technician assignment:', e.message);
   }
 
-  // Update calls table with assigned technician and sub-status
+  // Update calls table with assigned technician, status, and sub-status
   await pool.request()
     .input('ComplaintId', sql.NVarChar, String(complaintId))
     .input('TechnicianId', sql.Int, Number(technicianId))
+    .input('StatusId', sql.Int, statusId)
     .input('SubStatusId', sql.Int, subStatusId)
-    .query(`UPDATE calls SET assigned_tech_id = @TechnicianId, sub_status_id = @SubStatusId WHERE call_id = @ComplaintId`);
+    .query(`UPDATE calls SET assigned_tech_id = @TechnicianId, status_id = @StatusId, sub_status_id = @SubStatusId WHERE call_id = @ComplaintId`);
 
-  return { assignedTechnicianId: technician.technician_id, assignedTechnicianName: technician.name };
+  // Create action log entry for technician assignment
+  try {
+    const now = new Date();
+    await pool.request()
+      .input('CallId', sql.NVarChar, String(complaintId))
+      .input('UserId', sql.Int, 1) // System user for now
+      .input('OldStatusId', sql.Int, complaintRes.recordset[0].status_id)
+      .input('NewStatusId', sql.Int, statusId)
+      .input('OldSubStatusId', sql.Int, null)
+      .input('NewSubStatusId', sql.Int, subStatusId)
+      .input('Remarks', sql.NVarChar, `Assigned to technician: ${technician.name}`)
+      .input('ActionAt', sql.DateTime, now)
+      .query(`
+        INSERT INTO action_logs (entity_type, entity_id, user_id, action_user_role_id, old_status_id, new_status_id, old_substatus_id, new_substatus_id, remarks, action_at, created_at, updated_at)
+        VALUES ('Call', @CallId, @UserId, NULL, @OldStatusId, @NewStatusId, @OldSubStatusId, @NewSubStatusId, @Remarks, @ActionAt, @ActionAt, @ActionAt)
+      `);
+    console.log(`✅ Action log created for technician assignment to call ${complaintId}`);
+  } catch(logErr) {
+    console.warn(`⚠️ Failed to create action log for technician assignment:`, logErr.message);
+    // Don't fail the assignment if action log fails
+  }
+
+  return { 
+    assignedTechnicianId: technician.technician_id, 
+    assignedTechnicianName: technician.name,
+    isReallocation: isReallocation,
+    status: statusName,
+    statusId: statusId
+  };
 }
 
 export default {

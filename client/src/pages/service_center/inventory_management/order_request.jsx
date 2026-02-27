@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from "react";
 import OrderRequestModal from "./OrderRequestModal";
 import OrderRequestCreate from "./OrderRequestCreate";
-import OrderRequestDetails from "./OrderRequestDetails";
+import OrderRequestDetails from "./OrderRequestDetails.jsx";
 import OrderTrackingModal from "../../../components/OrderTrackingModal";
+import { getApiUrl } from "../../../config/apiConfig";
 
 export default function OrderRequest() {
   const [showCreateOrder, setShowCreateOrder] = useState(false);
@@ -93,7 +94,7 @@ export default function OrderRequest() {
     setSyncingToSAP(true);
     try {
       const token = localStorage.getItem('token');
-      const res = await fetch('http://localhost:5000/api/logistics/sync-sap', {
+      const res = await fetch(getApiUrl('/logistics/sync-sap'), {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -103,15 +104,27 @@ export default function OrderRequest() {
       });
 
       if (res.ok) {
+        const data = await res.json();
         setTrackingRequestId(requestId);
         setTrackingModalOpen(true);
       } else {
-        const errorData = await res.json();
-        alert('Error: ' + (errorData.error || 'Failed to sync with SAP'));
+        let errorMessage = 'Failed to sync with SAP';
+        try {
+          const errorData = await res.json();
+          if (errorData && errorData.error) {
+            errorMessage = errorData.error;
+          }
+        } catch (e) {
+          // If response is not JSON, use status text
+          errorMessage = res.statusText || 'Server error';
+        }
+        
+        console.error(`Error (${res.status}): ${errorMessage}`);
+        alert(`Error: ${errorMessage}`);
       }
     } catch (err) {
       console.error('Error syncing with SAP:', err);
-      alert('Error: ' + err.message);
+      alert(`Error: ${err.message || 'Failed to connect to server'}`);
     } finally {
       setSyncingToSAP(false);
     }

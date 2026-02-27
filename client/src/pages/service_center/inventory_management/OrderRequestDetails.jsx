@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { getApiUrl } from '../../../config/apiConfig';
 
 export default function OrderRequestDetails({ requestId, onClose }) {
   const [request, setRequest] = useState(null);
@@ -15,7 +16,7 @@ export default function OrderRequestDetails({ requestId, onClose }) {
       setError(null);
       const token = localStorage.getItem('token');
       
-      const response = await fetch(`/api/spare-requests/${requestId}`, {
+      const response = await fetch(getApiUrl(`/spare-requests/${requestId}`), {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'

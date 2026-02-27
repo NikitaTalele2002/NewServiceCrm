@@ -1,4 +1,4 @@
-import { Customer, CustomersProducts, Product, ProductModel, Calls, Dealers, Status, SubStatus, ServiceCenter, ServiceCenterPincodes, Users, Technicians } from '../models/index.js';
+import { Customer, CustomersProducts, Product, ProductModel, Calls, Dealers, Status, SubStatus, ServiceCenter, ServiceCenterPincodes, Users, Technicians, ActionLog } from '../models/index.js';
 
 /**
  * Lookup customer by mobile number
@@ -264,7 +264,18 @@ export const registerCustomer = async (req, res) => {
         customer_id: insertedCustomer?.customer_id,
         name: insertedCustomer?.name,
         mobile_no: insertedCustomer?.mobile_no,
+        alt_mob_no: insertedCustomer?.alt_mob_no,
         email: insertedCustomer?.email,
+        address: {
+          house_no: insertedCustomer?.house_no,
+          street_name: insertedCustomer?.street_name,
+          building_name: insertedCustomer?.building_name,
+          area: insertedCustomer?.area,
+          landmark: insertedCustomer?.landmark,
+          city_id: insertedCustomer?.city_id,
+          state_id: insertedCustomer?.state_id,
+          pincode: insertedCustomer?.pincode ? String(insertedCustomer.pincode).trim() : null
+        },
         customer_code: insertedCustomer?.customer_code,
         customer_priority: insertedCustomer?.customer_priority
       }
@@ -788,7 +799,66 @@ export const registerComplaint = async (req, res) => {
 
       console.log(`✅ Call record created: ID=${call.call_id}, Customer=${call.customer_id}`);
 
-      // Return the created call
+      // Create action log entry for call creation
+      try {
+        await ActionLog.create({
+          entity_type: 'Call',
+          entity_id: call.call_id,
+          user_id: callData.created_by || 1, // Use created_by if available, else system user
+          action_user_role_id: null,
+          old_status_id: null,
+          new_status_id: call.status_id || null,
+          old_substatus_id: null,
+          new_substatus_id: call.sub_status_id || null,
+          remarks: `Call created via ${callData.call_source || 'unknown'} for customer ${callData.customer_id}`,
+          action_at: call.created_at
+        });
+        console.log(`✅ Action log created for call ${call.call_id}`);
+      } catch (logErr) {
+        console.warn(`⚠️ Failed to create action log for call ${call.call_id}:`, logErr.message);
+        // Don't fail the call creation if action log fails
+      }
+
+      // If service center was assigned during call creation, log that as well
+      if (callData.assigned_asc_id) {
+        try {
+          const scTime = new Date(call.created_at);
+          scTime.setSeconds(scTime.getSeconds() + 5); // 5 seconds after call creation
+          
+          // Get service center name
+          const sc = await ServiceCenter.findByPk(callData.assigned_asc_id);
+          const scName = sc ? sc.asc_name : 'Unknown';
+          
+          await ActionLog.create({
+            entity_type: 'Call',
+            entity_id: call.call_id,
+            user_id: callData.created_by || 1,
+            action_user_role_id: null,
+            old_status_id: null,
+            new_status_id: call.status_id || null,
+            old_substatus_id: null,
+            new_substatus_id: call.sub_status_id || null,
+            remarks: `Assigned to Service Center: ${scName}`,
+            action_at: scTime
+          });
+          console.log(`✅ Action log created for service center assignment to call ${call.call_id}`);
+        } catch (logErr) {
+          console.warn(`⚠️ Failed to create action log for service center assignment:`, logErr.message);
+          // Don't fail if action log fails
+        }
+      }
+
+      // Fetch customer details to include in response
+      const customerDetails = await Customer.findByPk(call.customer_id, {
+        attributes: [
+          'customer_id', 'name', 'mobile_no', 'alt_mob_no', 'email',
+          'house_no', 'street_name', 'building_name', 'area', 'landmark',
+          'city_id', 'state_id', 'pincode', 'customer_code', 'customer_priority'
+        ],
+        raw: true
+      });
+
+      // Return the created call with customer details
       return res.status(201).json({
         success: true,
         message: 'Complaint registered successfully',
@@ -803,7 +873,26 @@ export const registerComplaint = async (req, res) => {
           visit_time: call.visit_time,
           assigned_asc_id: call.assigned_asc_id,
           created_at: call.createdAt
-        }
+        },
+        customer: customerDetails ? {
+          customer_id: customerDetails.customer_id,
+          name: customerDetails.name,
+          mobile_no: customerDetails.mobile_no,
+          alt_mob_no: customerDetails.alt_mob_no,
+          email: customerDetails.email,
+          address: {
+            house_no: customerDetails.house_no,
+            street_name: customerDetails.street_name,
+            building_name: customerDetails.building_name,
+            area: customerDetails.area,
+            landmark: customerDetails.landmark,
+            city_id: customerDetails.city_id,
+            state_id: customerDetails.state_id,
+            pincode: customerDetails.pincode ? String(customerDetails.pincode).trim() : null
+          },
+          customer_code: customerDetails.customer_code,
+          priority: customerDetails.customer_priority
+        } : null
       });
 
     } catch (createErr) {
@@ -893,6 +982,16 @@ export const registerComplaint = async (req, res) => {
 
         console.log(`✅ Call record created (via fallback): ID=${call.call_id}, Customer=${call.customer_id}`);
 
+        // Fetch customer details to include in response
+        const customerDetails = await Customer.findByPk(call.customer_id, {
+          attributes: [
+            'customer_id', 'name', 'mobile_no', 'alt_mob_no', 'email',
+            'house_no', 'street_name', 'building_name', 'area', 'landmark',
+            'city_id', 'state_id', 'pincode', 'customer_code', 'customer_priority'
+          ],
+          raw: true
+        });
+
         return res.status(201).json({
           success: true,
           message: 'Complaint registered successfully',
@@ -907,7 +1006,26 @@ export const registerComplaint = async (req, res) => {
             visit_time: call.visit_time,
             assigned_asc_id: call.assigned_asc_id,
             created_at: call.createdAt
-          }
+          },
+          customer: customerDetails ? {
+            customer_id: customerDetails.customer_id,
+            name: customerDetails.name,
+            mobile_no: customerDetails.mobile_no,
+            alt_mob_no: customerDetails.alt_mob_no,
+            email: customerDetails.email,
+            address: {
+              house_no: customerDetails.house_no,
+              street_name: customerDetails.street_name,
+              building_name: customerDetails.building_name,
+              area: customerDetails.area,
+              landmark: customerDetails.landmark,
+              city_id: customerDetails.city_id,
+              state_id: customerDetails.state_id,
+              pincode: customerDetails.pincode ? String(customerDetails.pincode).trim() : null
+            },
+            customer_code: customerDetails.customer_code,
+            priority: customerDetails.customer_priority
+          } : null
         });
 
       } catch (fallbackErr) {
@@ -1418,6 +1536,27 @@ export const assignComplaintToASC = async (req, res) => {
       ]
     });
 
+    // Create action log entry for service center assignment
+    try {
+      const now = new Date();
+      await ActionLog.create({
+        entity_type: 'Call',
+        entity_id: call_id,
+        user_id: assigned_by || 1,
+        action_user_role_id: null,
+        old_status_id: complaint.status_id || null,
+        new_status_id: openStatusId || null,
+        old_substatus_id: complaint.sub_status_id || null,
+        new_substatus_id: subStatusId || null,
+        remarks: `Assigned to Service Center: ${serviceCenter.asc_name || 'Unknown'}`,
+        action_at: now
+      });
+      console.log(`✅ Action log created for service center assignment to call ${call_id}`);
+    } catch (logErr) {
+      console.warn(`⚠️ Failed to create action log for service center assignment:`, logErr.message);
+      // Don't fail the assignment if action log fails
+    }
+
     res.status(200).json({
       success: true,
       message: 'Complaint assigned to service center successfully',
@@ -1512,7 +1651,10 @@ export const getComplaintsByServiceCenter = async (req, res) => {
     });
 
     // Normalize response keys to match frontend expectations (same as /api/complaints)
-    const mappedComplaints = complaints.map(c => {
+    const sequelize = Calls.sequelize;
+    
+    // For each complaint, get the status name from database if association failed
+    const mappedComplaints = await Promise.all(complaints.map(async (c) => {
       // Get technician name from the associated Technicians table
       let technicianName = '';
       if (c.assigned_tech_id && c.technician) {
@@ -1520,6 +1662,26 @@ export const getComplaintsByServiceCenter = async (req, res) => {
         console.log(`✅ Service Center ${ascId} - Call ${c.call_id}: Tech ID ${c.assigned_tech_id} → Name: ${technicianName}`);
       } else if (c.assigned_tech_id) {
         console.log(`⚠️  Service Center ${ascId} - Call ${c.call_id}: Has Tech ID ${c.assigned_tech_id} but no technician association!`);
+      }
+      
+      // Get status name - check association first, then query database if needed
+      let statusName = '';
+      if (c.status && c.status.status_name) {
+        statusName = c.status.status_name;
+      } else if (c.status_id) {
+        // Query database to get status name
+        try {
+          const statusResult = await sequelize.query(
+            'SELECT TOP 1 status_name FROM status WHERE status_id = ?',
+            { replacements: [c.status_id], type: sequelize.QueryTypes.SELECT }
+          );
+          statusName = statusResult && statusResult[0] ? statusResult[0].status_name : 'Unknown';
+        } catch (err) {
+          console.error(`⚠️  Error fetching status for call ${c.call_id}:`, err.message);
+          statusName = 'Unknown';
+        }
+      } else {
+        statusName = c.call_type || 'Open';
       }
       
       return {
@@ -1535,7 +1697,7 @@ export const getComplaintsByServiceCenter = async (req, res) => {
         Remark: c.remark || '',
         VisitDate: c.visit_date || null,
         VisitTime: c.visit_time || null,
-        CallStatus: c.status ? c.status.status_name : (c.call_type || 'Open'),
+        CallStatus: statusName,
         StatusId: c.status_id,
         AssignedCenterId: c.assigned_asc_id,
         AssignedTechnicianId: c.assigned_tech_id,
@@ -1547,7 +1709,7 @@ export const getComplaintsByServiceCenter = async (req, res) => {
         Model: c.customer_product_id ? (c.customer_product ? c.customer_product.model_name : '') : '',
         ProductSerialNo: c.customer_product_id ? (c.customer_product ? c.customer_product.serial_number : '') : ''
       };
-    });
+    }));
 
     res.status(200).json({
       success: true,
@@ -1602,52 +1764,51 @@ export const getCallStatusHistory = async (req, res) => {
       });
     }
 
-    // Get status history from ActionLog
-    const ActionLog = await import('../models/ActionLog.js').then(m => m.default(Calls.sequelize));
-    
-    const history = await ActionLog.findAll({
-      where: {
-        entity_type: 'Calls',
-        entity_id: callId
-      },
-      include: [
-        {
-          model: Status,
-          as: 'newStatus',
-          attributes: ['status_id', 'status_name'],
-          required: false
-        },
-        {
-          model: SubStatus,
-          as: 'newSubStatus',
-          attributes: ['sub_status_id', 'sub_status_name'],
-          required: false
-        },
-        {
-          model: Users,
-          attributes: ['user_id', 'username', 'email'],
-          required: false
-        }
-      ],
-      order: [['action_at', 'ASC']]
-    });
+    // Get status history from ActionLog with status names using raw SQL join
+    const sequelize = Calls.sequelize;
+    const history = await sequelize.query(
+      `SELECT 
+        al.log_id,
+        al.entity_type,
+        al.entity_id,
+        al.user_id,
+        u.username,
+        u.email,
+        al.old_status_id,
+        os.status_name as old_status_name,
+        al.new_status_id,
+        ns.status_name as new_status_name,
+        al.remarks,
+        al.action_at
+       FROM action_logs al
+       LEFT JOIN users u ON al.user_id = u.user_id
+       LEFT JOIN status os ON al.old_status_id = os.status_id
+       LEFT JOIN status ns ON al.new_status_id = ns.status_id
+       WHERE al.entity_type = 'Call' AND al.entity_id = ?
+       ORDER BY al.action_at ASC`,
+      { 
+        replacements: [callId],
+        type: sequelize.QueryTypes.SELECT 
+      }
+    );
 
     // Format response
     const statusSequence = history.map(log => ({
       logId: log.log_id,
       timestamp: log.action_at,
       remarks: log.remarks,
-      user: log.user ? {
-        userId: log.user.user_id,
-        username: log.user.username
+      user: log.username ? {
+        userId: log.user_id,
+        username: log.username,
+        email: log.email
       } : null,
-      status: log.newStatus ? {
-        statusId: log.newStatus.status_id,
-        statusName: log.newStatus.status_name
+      oldStatus: log.old_status_id ? {
+        statusId: log.old_status_id,
+        statusName: log.old_status_name
       } : null,
-      subStatus: log.newSubStatus ? {
-        subStatusId: log.newSubStatus.sub_status_id,
-        subStatusName: log.newSubStatus.sub_status_name
+      newStatus: log.new_status_id ? {
+        statusId: log.new_status_id,
+        statusName: log.new_status_name
       } : null
     }));
 

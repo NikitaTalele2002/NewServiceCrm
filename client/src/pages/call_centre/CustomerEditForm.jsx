@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import LocationSelector from '../../components/LocationSelector';
+import { updateCustomer } from '../../services/callCenterService_updated';
 
 export default function CustomerEditForm({ customer, onSave, onCancel, loading }) {
   const [form, setForm] = useState({
@@ -68,23 +69,13 @@ export default function CustomerEditForm({ customer, onSave, onCancel, loading }
 
       console.log('Sending customer update payload:', payload);
 
-      // Update API call - assuming PUT endpoint exists
-      const res = await fetch(`http://localhost:5000/api/call-center/customer/${customer.customer_id || customer.Id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
+      // Call the updateCustomer service function
+      const updatedCustomer = await updateCustomer(customer.customer_id || customer.Id, payload);
 
-      const data = await res.json();
+      console.log('Update response:', updatedCustomer);
 
-      console.log('Update response:', { status: res.status, data });
-
-      if (res.ok) {
-        alert('✓ Customer details updated successfully!');
-        onSave({ ...customer, ...payload });
-      } else {
-        setError(data.error || 'Failed to update customer');
-      }
+      alert('✓ Customer details updated successfully!');
+      onSave({ ...customer, ...updatedCustomer });
     } catch (err) {
       setError(`Error: ${err.message}`);
     } finally {
