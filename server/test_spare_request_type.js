@@ -12,7 +12,7 @@ async function testSpareRequestType() {
     console.log('\n📋 Step 1: Checking spare_request_type column...');
     const checkRes = await pool.request()
       .query(`
-        SELECT 
+        SELECT TOP 5
           request_id, 
           request_type, 
           spare_request_type,
@@ -22,7 +22,6 @@ async function testSpareRequestType() {
           created_at
         FROM spare_requests 
         ORDER BY request_id DESC
-        LIMIT 5
       `);
     
     if (checkRes.recordset.length === 0) {

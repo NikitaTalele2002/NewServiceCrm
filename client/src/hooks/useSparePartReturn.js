@@ -13,6 +13,7 @@ export const useSparePartReturn = () => {
   const [spares, setSpares] = useState([]);
   const [inventory, setInventory] = useState([]);
   const [cart, setCart] = useState([]);
+  const [cartInvoices, setCartInvoices] = useState({});  // NEW: Store invoice data per spare
   const [selectedItems, setSelectedItems] = useState({});
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -116,13 +117,54 @@ export const useSparePartReturn = () => {
     const itemsToAdd = inventory.filter(item => selectedItems[item.sku] && selectedItems[item.sku].returnQty > 0);
     setCart(prev => [...prev, ...itemsToAdd.map(item => ({
       ...item,
-      returnQty: selectedItems[item.sku].returnQty
+      returnQty: selectedItems[item.sku].returnQty,
+      // Ensure spare_id is set for FIFO invoice matching
+      spare_id: item.spare_id || item.Id || item.id
     }))]);
     setSelectedItems({});
   };
 
   const removeFromCart = (index) => {
     setCart(prev => prev.filter((_, i) => i !== index));
+  };
+
+  // NEW: Fetch FIFO invoices for items in cart
+  const fetchCartInvoices = async () => {
+    if (cart.length === 0) {
+      setCartInvoices({});
+      return;
+    }
+
+    try {
+      // Extract spare IDs from cart items - try multiple possible field names
+      const spareIds = [];
+      const spareIdMap = {};
+      
+      cart.forEach(item => {
+        // Try to find spare ID in various possible field names
+        const spareId = item.spare_id || item.Id || item.id || item.spareId;
+        if (spareId) {
+          spareIds.push(spareId);
+          spareIdMap[spareId] = item;
+        }
+      });
+
+      if (spareIds.length === 0) {
+        console.warn('⚠️  No spare IDs found in cart items');
+        return;
+      }
+
+      console.log('📦 Fetching FIFO invoices for cart spare IDs:', spareIds);
+      const response = await sparePartReturnService.getFIFOInvoices(spareIds, token);
+      
+      if (response.success && response.data) {
+        console.log('✅ FIFO invoices fetched:', response.data);
+        setCartInvoices(response.data);
+      }
+    } catch (error) {
+      console.error('⚠️  Error fetching cart invoices:', error);
+      // Don't set error here - just log it, as this is supplementary data
+    }
   };
 
   const submitRequest = async () => {
@@ -193,6 +235,11 @@ export const useSparePartReturn = () => {
     }
   }, [productGroup, product, model, sparePart]);
 
+  // NEW: Fetch FIFO invoices whenever cart changes
+  useEffect(() => {
+    fetchCartInvoices();
+  }, [cart]);
+
   return {
     // State
     returnType,
@@ -211,6 +258,7 @@ export const useSparePartReturn = () => {
     spares,
     inventory,
     cart,
+    cartInvoices,  // NEW: Invoice data for cart items
     selectedItems,
     loading,
     error,

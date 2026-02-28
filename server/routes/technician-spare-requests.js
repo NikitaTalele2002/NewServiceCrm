@@ -29,7 +29,9 @@ router.get('/spares', authenticateToken, async (req, res) => {
 
 /**
  * GET /api/technician-spare-requests/technicians
- * Returns all technicians for selection in request form
+ * Returns all technicians assigned to the requesting Service Center
+ * Used by Service Center staff to view their technicians
+ * NOTE: No longer needed in create flow (technician auto-detects from token)
  */
 router.get('/technicians', authenticateToken, async (req, res) => {
   try {
@@ -44,7 +46,7 @@ router.get('/technicians', authenticateToken, async (req, res) => {
       ORDER BY name ASC
     `, { replacements: [serviceCenterId], type: sequelize.QueryTypes.SELECT });
 
-    console.log('✅ Fetched technicians for form:', technicians.length);
+    console.log('✅ Fetched technicians for SC:', technicians.length);
     res.json({ success: true, data: technicians });
   } catch (err) {
     console.error('❌ Error fetching technicians:', err.message);
@@ -54,6 +56,8 @@ router.get('/technicians', authenticateToken, async (req, res) => {
 
 /**
  * GET /api/technician-spare-requests
+ * Returns all spare requests submitted by technicians to this Service Center
+ * Only Service Center users can view requests targeted to them
  */
 router.get('/', authenticateToken, async (req, res) => {
   try {
@@ -239,18 +243,16 @@ router.get('/:requestId', authenticateToken, async (req, res) => {
 /**
  * POST /api/technician-spare-requests/create
  * Creates a new spare request from a technician
+ * The technician submits the request, which goes to their assigned Service Center
  */
 router.post('/create', authenticateToken, async (req, res) => {
   try {
-    const serviceCenterId = req.user.centerId || req.user.service_center_id;
-    const { technician_id, call_id, request_type, request_reason, items } = req.body;
+    const userId = req.user.id;
+    const { call_id, request_type, request_reason, items } = req.body;
 
-    console.log('🆕 Creating new spare request:', { technician_id, call_id, serviceCenterId });
+    console.log('🆕 Technician creating spare request:', { userId, call_id });
 
     // Validate input
-    if (!technician_id) {
-      return res.status(400).json({ error: 'technician_id required' });
-    }
     if (!call_id) {
       return res.status(400).json({ error: 'call_id required' });
     }
@@ -264,6 +266,24 @@ router.post('/create', authenticateToken, async (req, res) => {
         return res.status(400).json({ error: 'Each item must have spare_id and quantity >= 1' });
       }
     }
+
+    // Step 1: Get technician details from user_id
+    console.log('🔍 Step 1: Get technician details...');
+    const techDetails = await sequelize.query(`
+      SELECT 
+        technician_id,
+        service_center_id,
+        name
+      FROM technicians
+      WHERE user_id = ?
+    `, { replacements: [userId], type: sequelize.QueryTypes.SELECT });
+
+    if (!techDetails.length) {
+      return res.status(400).json({ error: 'Technician record not found. User must be assigned as a technician.' });
+    }
+
+    const { technician_id, service_center_id } = techDetails[0];
+    console.log(`✅ Found technician ${technician_id} assigned to Service Center ${service_center_id}`);
 
     // Get pending status ID
     const pendingStatus = await sequelize.query(`
@@ -288,6 +308,7 @@ router.post('/create', authenticateToken, async (req, res) => {
         requested_to_id,
         requested_to_type,
         status_id,
+        created_by,
         created_at,
         updated_at
       )
@@ -301,10 +322,11 @@ router.post('/create', authenticateToken, async (req, res) => {
         ?,
         'service_center',
         ?,
+        ?,
         GETDATE(),
         GETDATE()
       )
-    `, { replacements: [request_type || 'spare_request', request_reason || '', technician_id, serviceCenterId, pendingStatusId], type: sequelize.QueryTypes.SELECT });
+    `, { replacements: [request_type || 'spare_request', request_reason || '', technician_id, service_center_id, pendingStatusId, userId], type: sequelize.QueryTypes.SELECT });
 
     const requestId = requestResult && requestResult[0] ? requestResult[0].request_id : null;
 

@@ -46,7 +46,7 @@ export default (sequelize) => {
         comment: 'Operation on bucket: INCREASE adds to bucket qty, DECREASE removes from bucket qty'
       },
       reference_type: {
-        type: DataTypes.ENUM('purchase_order', 'spare_request', 'return_request', 'transfer_request', 'adjustment'),
+        type: DataTypes.ENUM('purchase_order', 'spare_request', 'return_request', 'transfer_request', 'adjustment', 'call_spare_usage'),
         allowNull: false,
         field: 'reference_type',
       },

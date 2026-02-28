@@ -116,7 +116,7 @@ const TechnicianCurrentInventory = () => {
       
       // Use the service-center inventory endpoint that returns all technicians
       const response = await fetch(
-        getApiUrl('/technician-spare-requests/service-center/inventory'),
+        getApiUrl('/technician-sc-spare-requests/service-center/inventory'),
         {
           method: 'GET',
           headers: {

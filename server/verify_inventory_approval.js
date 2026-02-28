@@ -29,9 +29,10 @@ async function verifyApprovalLogic() {
         AND si.location_id = sr.requested_source_id
       LEFT JOIN spare_parts sp ON sri.spare_id = sp.Id
       WHERE sr.status_id = (
-        SELECT status_id FROM status WHERE status_name = 'approved_by_rsm' LIMIT 1
+        SELECT TOP 1 status_id FROM status WHERE status_name = 'approved_by_rsm'
       )
-      ORDER BY sr.request_id DESC LIMIT 10;
+      ORDER BY sr.request_id DESC 
+      OFFSET 0 ROWS FETCH NEXT 10 ROWS ONLY;
     `);
 
     if (spareRequests[0].length === 0) {

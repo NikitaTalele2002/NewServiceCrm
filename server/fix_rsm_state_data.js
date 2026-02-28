@@ -57,7 +57,7 @@ async function fixRSMStateDataMapping() {
     // Create correct mappings: RSM.user_id -> state
     // Get first state
     const states = await sequelize.query(
-      `SELECT Id FROM States LIMIT 1`,
+      `SELECT TOP 1 Id FROM States`,
       { type: sequelize.QueryTypes.SELECT }
     );
 

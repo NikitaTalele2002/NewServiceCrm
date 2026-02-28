@@ -30,6 +30,11 @@ const TechnicianInventoryTable = ({ inventory, technician, loading, error, onRet
     { key: 'qty_good', header: 'Good Qty' },
     { key: 'qty_defective', header: 'Defective Qty' },
     {
+      key: 'total',
+      header: 'Total',
+      render: (item) => (item.qty_good || 0) + (item.qty_defective || 0)
+    },
+    {
       key: 'updated_at',
       header: 'Last Updated',
       render: (item) => formatDate(item.updated_at || item.created_at)
@@ -62,6 +67,11 @@ const TechnicianInventoryTable = ({ inventory, technician, loading, error, onRet
     updated_at: item.updated_at
   }));
 
+  // Debug logging
+  console.log('📊 TechnicianInventoryTable - Raw inventory:', inventory);
+  console.log('📊 TechnicianInventoryTable - Mapped data:', mappedData);
+  console.log('📊 TechnicianInventoryTable - Technician:', technician);
+
   return (
     <div className="bg-white shadow rounded-lg p-6">
       <h3 className="text-lg font-semibold text-gray-900 mb-4">
@@ -90,25 +100,40 @@ const TechnicianInventoryTable = ({ inventory, technician, loading, error, onRet
             <tbody className="divide-y divide-gray-200">
               {mappedData.map((item, idx) => (
                 <tr key={idx} className="hover:bg-gray-50">
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-mono font-semibold text-gray-900">
-                    {item.PART}
-                  </td>
-                  <td className="px-6 py-4 text-sm text-gray-600">
-                    {item.DESCRIPTION}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-green-100 text-green-800">
-                      {item.qty_good}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-red-100 text-red-800">
-                      {item.qty_defective}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
-                    {formatDate(item.updated_at || item.created_at)}
-                  </td>
+                  {columns.map((col) => {
+                    let cellContent = col.render ? col.render(item) : item[col.key];
+                    
+                    // Apply specific styling for different columns
+                    let cellClass = "px-6 py-4 whitespace-nowrap text-sm text-gray-900";
+                    
+                    if (col.key === 'PART') {
+                      cellClass = "px-6 py-4 whitespace-nowrap text-sm font-mono font-semibold text-gray-900";
+                    } else if (col.key === 'qty_good') {
+                      cellClass = "px-6 py-4 whitespace-nowrap";
+                      cellContent = (
+                        <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-green-100 text-green-800">
+                          {cellContent}
+                        </span>
+                      );
+                    } else if (col.key === 'qty_defective') {
+                      cellClass = "px-6 py-4 whitespace-nowrap";
+                      cellContent = (
+                        <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-red-100 text-red-800">
+                          {cellContent}
+                        </span>
+                      );
+                    } else if (col.key === 'total') {
+                      cellClass = "px-6 py-4 whitespace-nowrap text-sm font-semibold text-gray-900";
+                    } else if (col.key === 'updated_at') {
+                      cellClass = "px-6 py-4 whitespace-nowrap text-sm text-gray-600";
+                    }
+                    
+                    return (
+                      <td key={col.key} className={cellClass}>
+                        {cellContent}
+                      </td>
+                    );
+                  })}
                 </tr>
               ))}
             </tbody>

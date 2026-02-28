@@ -17,7 +17,7 @@ const TechnicianInventoryView = () => {
       setError(null);
 
       const token = localStorage.getItem('token');
-      const response = await fetch(`http://localhost:5000/api/technician-spare-requests/service-center/inventory`, {
+      const response = await fetch(`http://localhost:5000/api/technician-sc-spare-requests/service-center/inventory`, {
         method: 'GET',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -123,10 +123,10 @@ const TechnicianInventoryView = () => {
                 >
                   <div className="flex items-center justify-between">
                     <div className="flex-1">
-                      <h3 className="text-xl font-semibold text-gray-900">{tech.technician_name}</h3>
+                      <h3 className="text-xl font-semibold text-gray-900">{tech.technicianName}</h3>
                       <div className="mt-2 flex gap-4 text-sm text-gray-600">
-                        <span>📧 {tech.technician_email}</span>
-                        <span>📱 {tech.technician_mobile}</span>
+                        <span>📧 {tech.technicianEmail}</span>
+                        <span>📱 {tech.technicianPhone}</span>
                       </div>
                     </div>
                     <div className="flex items-center gap-4">
@@ -167,27 +167,27 @@ const TechnicianInventoryView = () => {
                             <tr key={idx} className="hover:bg-gray-50">
                               <td className="px-6 py-4 whitespace-nowrap">
                                 <span className="font-mono text-sm font-semibold text-gray-900">
-                                  {getSafeValue(item.PART)}
+                                  {getSafeValue(item.partCode)}
                                 </span>
                               </td>
                               <td className="px-6 py-4">
                                 <span className="text-sm text-gray-600">
-                                  {getSafeValue(item.DESCRIPTION)}
+                                  {getSafeValue(item.partDescription)}
                                 </span>
                               </td>
                               <td className="px-6 py-4 whitespace-nowrap text-center">
                                 <span className="inline-flex items-center justify-center px-3 py-1 rounded-full text-sm font-medium bg-green-100 text-green-800">
-                                  {getSafeValue(item.qty_good, 0)}
+                                  {getSafeValue(item.qtyGood, 0)}
                                 </span>
                               </td>
                               <td className="px-6 py-4 whitespace-nowrap text-center">
                                 <span className="inline-flex items-center justify-center px-3 py-1 rounded-full text-sm font-medium bg-red-100 text-red-800">
-                                  {getSafeValue(item.qty_defective, 0)}
+                                  {getSafeValue(item.qtyDefective, 0)}
                                 </span>
                               </td>
                               <td className="px-6 py-4 whitespace-nowrap text-center">
                                 <span className="text-sm font-semibold text-gray-900">
-                                  {getSafeValue(item.total_qty, 0)}
+                                  {getSafeValue(item.totalQty, 0)}
                                 </span>
                               </td>
                               <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">

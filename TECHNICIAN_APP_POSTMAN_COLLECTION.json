@@ -1,0 +1,561 @@
+{
+  "info": {
+    "name": "Technician App APIs",
+    "description": "Complete collection of APIs used by the Technician App for spare request, returns, and tracking",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "1. Authentication",
+      "item": [
+        {
+          "name": "Login",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"technician_user\",\n  \"password\": \"password123\"\n}"
+            },
+            "url": {
+              "raw": "http://localhost:5000/api/auth/login",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "5000",
+              "path": ["api", "auth", "login"]
+            },
+            "description": "Technician login - Returns JWT token for subsequent requests"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "2. Spare Request to Service Center (Rental Allocation)",
+      "item": [
+        {
+          "name": "Create Spare Request",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"spares\": [\n    {\n      \"spareId\": 1,\n      \"quantity\": 2,\n      \"reason\": \"Replacement during call\"\n    },\n    {\n      \"spareId\": 3,\n      \"quantity\": 1,\n      \"reason\": \"Additional stock request\"\n    }\n  ],\n  \"requestReason\": \"Need spares for call execution\",\n  \"callId\": 100,\n  \"remarks\": \"Urgent request\"\n}"
+            },
+            "url": {
+              "raw": "http://localhost:5000/api/technician-sc-spare-requests/create",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "5000",
+              "path": ["api", "technician-sc-spare-requests", "create"]
+            },
+            "description": "Technician creates spare request to their assigned Service Center"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Spare Request Details",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "http://localhost:5000/api/technician-sc-spare-requests/{{requestId}}",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "5000",
+              "path": ["api", "technician-sc-spare-requests", "{{requestId}}"]
+            },
+            "description": "Get details of a specific spare request"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "3. Spare Return to Service Center",
+      "item": [
+        {
+          "name": "Create Spare Return Request",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"callId\": 100,\n  \"items\": [\n    {\n      \"spareId\": 1,\n      \"qty_good\": 1,\n      \"qty_defective\": 1,\n      \"remarks\": \"Used 1 unit, 1 defective\"\n    },\n    {\n      \"spareId\": 3,\n      \"qty_good\": 1,\n      \"qty_defective\": 0,\n      \"remarks\": \"Not needed\"\n    }\n  ],\n  \"requestReason\": \"Returning unused and defective spares\",\n  \"remarks\": \"Call completed\"\n}"
+            },
+            "url": {
+              "raw": "http://localhost:5000/api/technician-spare-returns/create",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "5000",
+              "path": ["api", "technician-spare-returns", "create"]
+            },
+            "description": "Technician submits spare return request after call completion"
+          },
+          "response": []
+        },
+        {
+          "name": "Get All Return Requests",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "http://localhost:5000/api/technician-spare-returns/",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "5000",
+              "path": ["api", "technician-spare-returns", ""]
+            },
+            "description": "Get all spare return requests submitted by technician"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Return Request Details",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "http://localhost:5000/api/technician-spare-returns/{{returnId}}",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "5000",
+              "path": ["api", "technician-spare-returns", "{{returnId}}"]
+            },
+            "description": "Get details of a specific return request"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "4. Spare Consumption Tracking",
+      "item": [
+        {
+          "name": "Log Spare Usage",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"callId\": 100,\n  \"spare_part_id\": 1,\n  \"used_qty\": 2,\n  \"remarks\": \"Replaced faulty unit\"\n}"
+            },
+            "url": {
+              "raw": "http://localhost:5000/api/technician-tracking/spare-consumption",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "5000",
+              "path": ["api", "technician-tracking", "spare-consumption"]
+            },
+            "description": "Log spare parts used during a call"
+          },
+          "response": []
+        },
+        {
+          "name": "Get All Spare Consumption History",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "http://localhost:5000/api/technician-tracking/spare-consumption",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "5000",
+              "path": ["api", "technician-tracking", "spare-consumption"]
+            },
+            "description": "Get all spare consumption records for technician"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Spares Used in Specific Call",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "http://localhost:5000/api/technician-tracking/spare-consumption/call/{{callId}}",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "5000",
+              "path": ["api", "technician-tracking", "spare-consumption", "call", "{{callId}}"]
+            },
+            "description": "Get all spares used in a specific call"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "5. TAT (Turnaround Time) Tracking",
+      "item": [
+        {
+          "name": "Create TAT Record",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"callId\": 100,\n  \"startTime\": \"2026-02-27T10:00:00Z\",\n  \"endTime\": \"2026-02-27T11:30:00Z\",\n  \"delayMinutes\": 0,\n  \"remarks\": \"Call completed on time\"\n}"
+            },
+            "url": {
+              "raw": "http://localhost:5000/api/technician-tracking/tat-tracking",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "5000",
+              "path": ["api", "technician-tracking", "tat-tracking"]
+            },
+            "description": "Create TAT tracking record"
+          },
+          "response": []
+        },
+        {
+          "name": "Get All TAT Records",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "http://localhost:5000/api/technician-tracking/tat-tracking",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "5000",
+              "path": ["api", "technician-tracking", "tat-tracking"]
+            },
+            "description": "Get all TAT tracking records for technician"
+          },
+          "response": []
+        },
+        {
+          "name": "Get TAT for Specific Call",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "http://localhost:5000/api/technician-tracking/tat-tracking/call/{{callId}}",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "5000",
+              "path": ["api", "technician-tracking", "tat-tracking", "call", "{{callId}}"]
+            },
+            "description": "Get TAT record for specific call"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "6. TAT Holds Management",
+      "item": [
+        {
+          "name": "Create TAT Hold",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"callId\": 100,\n  \"holdReason\": \"Waiting for spare parts\",\n  \"remarks\": \"Expected delivery in 2 hours\"\n}"
+            },
+            "url": {
+              "raw": "http://localhost:5000/api/technician-tracking/tat-holds",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "5000",
+              "path": ["api", "technician-tracking", "tat-holds"]
+            },
+            "description": "Create a TAT hold/delay record"
+          },
+          "response": []
+        },
+        {
+          "name": "Get All TAT Holds",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "http://localhost:5000/api/technician-tracking/tat-holds",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "5000",
+              "path": ["api", "technician-tracking", "tat-holds"]
+            },
+            "description": "Get all TAT holds for technician"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Holds for Specific Call",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "http://localhost:5000/api/technician-tracking/tat-holds/call/{{callId}}",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "5000",
+              "path": ["api", "technician-tracking", "tat-holds", "call", "{{callId}}"]
+            },
+            "description": "Get all holds for specific call"
+          },
+          "response": []
+        },
+        {
+          "name": "Resolve TAT Hold",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"resolveNotes\": \"Spare parts received, resuming work\"\n}"
+            },
+            "url": {
+              "raw": "http://localhost:5000/api/technician-tracking/tat-holds/{{holdId}}/resolve",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "5000",
+              "path": ["api", "technician-tracking", "tat-holds", "{{holdId}}", "resolve"]
+            },
+            "description": "Resolve/remove a TAT hold"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "7. Call Management",
+      "item": [
+        {
+          "name": "Close Call",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"closureReason\": \"Issue resolved\",\n  \"remarks\": \"All spares installed and tested successfully\"\n}"
+            },
+            "url": {
+              "raw": "http://localhost:5000/api/technician-tracking/call/{{callId}}/close",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "5000",
+              "path": ["api", "technician-tracking", "call", "{{callId}}", "close"]
+            },
+            "description": "Close/complete a call"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Call Summary",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "http://localhost:5000/api/technician-tracking/summary/{{callId}}",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "5000",
+              "path": ["api", "technician-tracking", "summary", "{{callId}}"]
+            },
+            "description": "Get complete summary of a call including spares, TAT, holds"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "8. Spare Tracking History",
+      "item": [
+        {
+          "name": "Get Call Spare History",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "http://localhost:5000/api/spare-tracking/call/{{callId}}/history",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "5000",
+              "path": ["api", "spare-tracking", "call", "{{callId}}", "history"]
+            },
+            "description": "Get complete spare usage history for a call"
+          },
+          "response": []
+        },
+        {
+          "name": "Get All Calls Using Spare",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "http://localhost:5000/api/spare-tracking/spare/{{spareId}}/calls",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "5000",
+              "path": ["api", "spare-tracking", "spare", "{{spareId}}", "calls"]
+            },
+            "description": "Get all calls where a specific spare was used"
+          },
+          "response": []
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "token",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "callId",
+      "value": "100",
+      "type": "string"
+    },
+    {
+      "key": "requestId",
+      "value": "1",
+      "type": "string"
+    },
+    {
+      "key": "returnId",
+      "value": "1",
+      "type": "string"
+    },
+    {
+      "key": "holdId",
+      "value": "1",
+      "type": "string"
+    },
+    {
+      "key": "spareId",
+      "value": "1",
+      "type": "string"
+    }
+  ]
+}

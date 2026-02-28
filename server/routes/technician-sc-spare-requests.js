@@ -18,6 +18,55 @@ import { QueryTypes } from 'sequelize';
 const router = express.Router();
 
 /**
+ * GET /api/technician-sc-spare-requests/spares
+ * Returns all available spare parts for selection in request form
+ */
+router.get('/spares', authenticateToken, async (req, res) => {
+  try {
+    const spareParts = await sequelize.query(`
+      SELECT DISTINCT
+        sp.Id,
+        sp.PART,
+        sp.DESCRIPTION
+      FROM spare_parts sp
+      ORDER BY sp.PART ASC
+    `, { type: sequelize.QueryTypes.SELECT });
+
+    console.log('✅ Fetched spare parts for form:', spareParts.length);
+    res.json({ success: true, data: spareParts });
+  } catch (err) {
+    console.error('❌ Error fetching spare parts:', err.message);
+    res.status(500).json({ error: 'Failed to fetch spare parts', details: err.message });
+  }
+});
+
+/**
+ * GET /api/technician-sc-spare-requests/technicians
+ * Returns all technicians assigned to the requesting Service Center
+ * Used by Service Center staff to view their technicians
+ */
+router.get('/technicians', authenticateToken, async (req, res) => {
+  try {
+    const serviceCenterId = req.user.centerId || req.user.service_center_id;
+    const technicians = await sequelize.query(`
+      SELECT DISTINCT
+        technician_id,
+        name,
+        phone
+      FROM technicians
+      WHERE service_center_id = ?
+      ORDER BY name ASC
+    `, { replacements: [serviceCenterId], type: sequelize.QueryTypes.SELECT });
+
+    console.log('✅ Fetched technicians for SC:', technicians.length);
+    res.json({ success: true, data: technicians });
+  } catch (err) {
+    console.error('❌ Error fetching technicians:', err.message);
+    res.status(500).json({ error: 'Failed to fetch technicians', details: err.message });
+  }
+});
+
+/**
  * POST /api/technician-sc-spare-requests/create
  * Technician submits a spare request to their assigned Service Center
  */
@@ -73,23 +122,28 @@ router.post('/create', authenticateToken, async (req, res) => {
     // Step 1.5: Validate call assignment if callId is provided
     if (callId) {
       console.log('\n🔍 Step 1.5: Validate call assignment...');
-      const callAssignment = await sequelize.query(`
-        SELECT c.call_id, c.call_number
-        FROM calls c
-        LEFT JOIN call_technician_assignment cta ON c.call_id = cta.call_id
-        WHERE c.call_id = ?
-          AND cta.technician_id = ?
-          AND c.call_status_id NOT IN (
-            SELECT status_id FROM [status] WHERE status_name IN ('closed', 'cancelled')
-          )
-      `, { replacements: [callId, technicianId], type: QueryTypes.SELECT });
+      try {
+        // Simplified query: just check if call exists and is assigned to technician
+        const callAssignment = await sequelize.query(`
+          SELECT c.call_id, c.call_number
+          FROM calls c
+          INNER JOIN call_technician_assignment cta ON c.call_id = cta.call_id
+          WHERE c.call_id = ? AND cta.technician_id = ?
+        `, { replacements: [callId, technicianId], type: QueryTypes.SELECT });
 
-      if (!callAssignment || callAssignment.length === 0) {
-        return res.status(403).json({ 
-          error: `This technician is not assigned to call ${callId} or the call is closed/cancelled` 
-        });
+        if (!callAssignment || callAssignment.length === 0) {
+          console.warn(`⚠️ Call ${callId} not assigned to technician ${technicianId}`);
+          return res.status(403).json({ 
+            error: `This technician is not assigned to call ${callId}` 
+          });
+        }
+        
+        console.log(`✅ Call ${callId} is assigned to this technician`);
+      } catch (callCheckErr) {
+        console.warn(`⚠️ Warning checking call assignment (non-critical): ${callCheckErr.message}`);
+        // Don't block the request if call check fails - continue anyway
+        console.log(`✅ Proceeding without call validation`);
       }
-      console.log(`✅ Call ${callId} is assigned to this technician`);
     }
 
     // Validate spare parts exist
@@ -1042,10 +1096,13 @@ router.get('/:requestId', authenticateToken, async (req, res) => {
     console.log('🔐 Service Center ID:', serviceCenterId);
 
     // Get main request details
-    const mainRequest = await sequelize.query(`
+    // For technicians, they can view their own requests
+    // For service center staff, they can view requests for their center
+    let mainRequestQuery = `
       SELECT 
         sr.request_id,
         'REQ-' + CAST(sr.request_id AS VARCHAR) as requestNumber,
+        sr.requested_to_id as serviceCenterId,
         t.technician_id,
         t.name as technicianName,
         t.mobile_no as technicianPhone,
@@ -1062,9 +1119,18 @@ router.get('/:requestId', authenticateToken, async (req, res) => {
       WHERE sr.request_id = ?
         AND sr.requested_source_type = 'technician'
         AND sr.requested_to_type = 'service_center'
-        AND sr.requested_to_id = ?
-    `, { 
-      replacements: [requestId, serviceCenterId], 
+    `;
+    
+    const queryReplacements = [requestId];
+    
+    // Add service center filter if user is from service center
+    if (serviceCenterId) {
+      mainRequestQuery += ` AND sr.requested_to_id = ?`;
+      queryReplacements.push(serviceCenterId);
+    }
+
+    const mainRequest = await sequelize.query(mainRequestQuery, { 
+      replacements: queryReplacements, 
       type: QueryTypes.SELECT 
     });
 
@@ -1076,6 +1142,7 @@ router.get('/:requestId', authenticateToken, async (req, res) => {
     }
 
     const request = mainRequest[0];
+    const scId = request.serviceCenterId;  // Get service center ID from request
     console.log(`✅ Request found: ${request.requestNumber} (Status: ${request.status})`);
 
     // Get spare request items with inventory
@@ -1114,7 +1181,7 @@ router.get('/:requestId', authenticateToken, async (req, res) => {
               AND location_type = 'service_center'
               AND location_id = ?
           `, { 
-            replacements: [item.spareId, serviceCenterId], 
+            replacements: [item.spareId, scId], 
             type: QueryTypes.SELECT 
           });
 

@@ -37,7 +37,7 @@ const TechnicianSpareRequest = () => {
   const fetchTechnicians = async () => {
     try {
       const token = getToken();
-      const response = await fetch(getApiUrl('/technician-spare-requests/technicians'), {
+      const response = await fetch(getApiUrl('/technician-sc-spare-requests/technicians'), {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
@@ -57,7 +57,7 @@ const TechnicianSpareRequest = () => {
   const fetchSpareParts = async () => {
     try {
       const token = getToken();
-      const response = await fetch(getApiUrl('/technician-spare-requests/spares'), {
+      const response = await fetch(getApiUrl('/technician-sc-spare-requests/spares'), {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
@@ -127,7 +127,7 @@ const TechnicianSpareRequest = () => {
       }
 
       const token = getToken();
-      const response = await fetch(getApiUrl('/technician-spare-requests/create'), {
+      const response = await fetch(getApiUrl('/technician-sc-spare-requests/create'), {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,

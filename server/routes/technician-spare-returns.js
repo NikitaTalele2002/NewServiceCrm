@@ -25,35 +25,32 @@ const router = express.Router();
 
 /**
  * POST /api/technician-spare-returns/create
- * Technician submits a spare return request with defective and unused spares
+ * Technician submits a spare request (defective or returns)
  */
 router.post('/create', authenticateToken, async (req, res) => {
   const transaction = await sequelize.transaction();
   try {
     const userId = req.user.id;
-    const { callId, items, remarks } = req.body;
+    const { callId, items, remarks, requestReason = 'defect', requestType = 'TECH_RETURN_DEFECTIVE' } = req.body;
 
     console.log('\n' + '='.repeat(60));
-    console.log('🆕 TECHNICIAN SPARE RETURN REQUEST');
+    console.log('🆕 TECHNICIAN SPARE REQUEST');
     console.log('='.repeat(60));
 
     // Validate input
     if (!items || !Array.isArray(items) || items.length === 0) {
-      return res.status(400).json({ error: 'At least one spare must be included in the return' });
+      return res.status(400).json({ error: 'At least one spare must be included in the request' });
     }
 
-    // Get technician details and assigned service center
-    console.log('\n🔍 Step 1: Verify technician and service center...');
+    // Get technician details
+    console.log('\n🔍 Step 1: Verify technician...');
     
     const techDetails = await sequelize.query(`
       SELECT 
         t.technician_id,
         t.name as technician_name,
-        t.service_center_id,
-        sc.asc_id,
-        sc.asc_name
+        t.service_center_id
       FROM technicians t
-      LEFT JOIN service_centers sc ON t.service_center_id = sc.asc_id
       WHERE t.user_id = ?
     `, { replacements: [userId], type: QueryTypes.SELECT });
 
@@ -64,7 +61,7 @@ router.post('/create', authenticateToken, async (req, res) => {
 
     const tech = techDetails[0];
     const technicianId = tech.technician_id;
-    const serviceCenterId = tech.service_center_id || tech.asc_id;
+    const serviceCenterId = tech.service_center_id;
 
     if (!serviceCenterId) {
       await transaction.rollback();
@@ -72,75 +69,74 @@ router.post('/create', authenticateToken, async (req, res) => {
     }
 
     console.log(`✅ Technician verified: ${tech.technician_name} (ID: ${technicianId})`);
-    console.log(`✅ Service Center: ${tech.asc_name} (ID: ${serviceCenterId})`);
+    console.log(`✅ Assigned Service Center ID: ${serviceCenterId}`);
 
-    // Validate call if provided
-    if (callId) {
-      console.log('\n🔍 Step 2: Validate call assignment...');
-      const callCheck = await sequelize.query(`
-        SELECT c.call_id, c.call_number
-        FROM calls c
-        WHERE c.call_id = ?
-          AND c.assigned_asc_id = (SELECT service_center_id FROM technicians WHERE technician_id = ?)
-      `, { replacements: [callId, technicianId], type: QueryTypes.SELECT });
+    // Get status_id for 'Pending' status
+    const statusResult = await sequelize.query(`
+      SELECT TOP 1 status_id FROM status WHERE status_name = 'Pending'
+    `, { replacements: [], type: QueryTypes.SELECT });
 
-      if (!callCheck || callCheck.length === 0) {
-        await transaction.rollback();
-        return res.status(403).json({ error: 'This call is not assigned to your service center' });
-      }
-      console.log(`✅ Call validated: ${callCheck[0].call_number}`);
+    if (!statusResult || !statusResult.length) {
+      await transaction.rollback();
+      return res.status(500).json({ error: 'Status not found' });
     }
 
-    // Generate return request number
-    const timestamp = new Date().toISOString().split('T')[0].replace(/-/g, '');
-    const returnNumber = `TSR-${timestamp}-${Math.random().toString(36).substr(2, 9).toUpperCase()}`;
+    const statusId = statusResult[0].status_id;
 
-    console.log('\n📦 Step 3: Create return request and items...');
+    console.log('\n📦 Step 2: Create spare request...');
 
-    // Create main return request
-    const [returnReq] = await sequelize.query(`
-      INSERT INTO technician_spare_returns (
+    // Create main spare request - send to assigned service center, not warehouse
+    const createResult = await sequelize.query(`
+      INSERT INTO spare_requests (
         call_id,
-        technician_id,
-        service_center_id,
-        return_number,
-        return_status,
-        remarks,
+        spare_request_type,
+        requested_source_type,
+        requested_source_id,
+        requested_to_type,
+        requested_to_id,
+        request_reason,
+        status_id,
         created_by,
         created_at,
         updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, GETDATE(), GETDATE())
-      
-      SELECT return_id FROM technician_spare_returns WHERE return_number = ?
+      ) VALUES (?, ?, 'technician', ?, 'service_center', ?, ?, ?, ?, GETDATE(), GETDATE())
     `, {
       replacements: [
         callId || null,
+        requestType,
         technicianId,
         serviceCenterId,
-        returnNumber,
-        'submitted',  // Directly submit instead of draft
-        remarks || null,
-        userId,
-        returnNumber
+        requestReason,
+        statusId,
+        userId
       ],
-      type: QueryTypes.SELECT,
       transaction
     });
 
-    const returnId = returnReq?.return_id;
-    if (!returnId) {
+    // Get the inserted request_id
+    const [newRequest] = await sequelize.query(`
+      SELECT TOP 1 request_id FROM spare_requests 
+      WHERE created_by = ? AND created_at = (SELECT MAX(created_at) FROM spare_requests WHERE created_by = ?)
+      ORDER BY request_id DESC
+    `, { 
+      replacements: [userId, userId], 
+      type: QueryTypes.SELECT,
+      transaction 
+    });
+
+    const requestId = newRequest?.request_id;
+    if (!requestId) {
       await transaction.rollback();
-      return res.status(500).json({ error: 'Failed to create return request' });
+      return res.status(500).json({ error: 'Failed to create spare request' });
     }
 
-    console.log(`✅ Return request created: ${returnNumber} (ID: ${returnId})`);
+    console.log(`✅ Spare request created (ID: ${requestId})`);
 
-    // Add items to return request
-    let goodSpareCount = 0;
-    let defectiveSpareCount = 0;
+    // Add items to spare request
+    let totalItems = 0;
 
     for (const item of items) {
-      const { spareId, itemType, requestedQty, defectReason } = item;
+      const { spareId, requestedQty, condition = 'good' } = item;
 
       // Validate spare exists
       const spare = await sequelize.query(`
@@ -152,64 +148,55 @@ router.post('/create', authenticateToken, async (req, res) => {
         return res.status(400).json({ error: `Spare part ${spareId} not found` });
       }
 
-      // Insert return item
+      // Insert request item with condition
       await sequelize.query(`
-        INSERT INTO technician_spare_return_items (
-          return_id,
+        INSERT INTO spare_request_items (
+          request_id,
           spare_id,
-          item_type,
           requested_qty,
-          received_qty,
-          verified_qty,
-          defect_reason,
+          approved_qty,
+          condition,
           created_at,
           updated_at
-        ) VALUES (?, ?, ?, ?, 0, 0, ?, GETDATE(), GETDATE())
+        ) VALUES (?, ?, ?, 0, ?, GETDATE(), GETDATE())
       `, {
         replacements: [
-          returnId,
+          requestId,
           spareId,
-          itemType,
           requestedQty,
-          defectReason || null
+          condition
         ],
         transaction
       });
 
-      if (itemType === 'defective') {
-        defectiveSpareCount += requestedQty;
-      } else {
-        goodSpareCount += requestedQty;
-      }
-
-      console.log(`   ✅ Added ${spare[0].DESCRIPTION} (${itemType}): ${requestedQty} qty`);
+      totalItems += requestedQty;
+      console.log(`   ✅ Added ${spare[0].DESCRIPTION}: ${requestedQty} qty (Condition: ${condition})`);
     }
 
     await transaction.commit();
 
-    console.log(`\n✅ Spare return request created successfully!`);
-    console.log(`   Return Number: ${returnNumber}`);
-    console.log(`   Defective spares: ${defectiveSpareCount}`);
-    console.log(`   Unused spares: ${goodSpareCount}`);
+    console.log(`\n✅ Spare request created successfully!`);
+    console.log(`   Request ID: ${requestId}`);
+    console.log(`   Total items: ${totalItems}`);
 
     res.json({
       success: true,
-      returnId,
-      returnNumber,
-      status: 'submitted',
-      message: 'Spare return request submitted successfully',
-      summary: {
-        defectiveCount: defectiveSpareCount,
-        unusedCount: goodSpareCount,
-        totalItems: items.length
+      requestId,
+      status: 'Pending',
+      message: 'Spare request submitted successfully',
+      data: {
+        request_id: requestId,
+        spare_request_type: requestType,
+        created_at: new Date().toISOString(),
+        total_items: totalItems
       }
     });
 
   } catch (error) {
     await transaction.rollback();
-    console.error('❌ Error creating spare return request:', error);
+    console.error('❌ Error creating spare request:', error);
     res.status(500).json({ 
-      error: 'Failed to create spare return request',
+      error: 'Failed to create spare request',
       details: error.message 
     });
   }
@@ -226,38 +213,51 @@ router.get('/', authenticateToken, async (req, res) => {
 
     console.log('📋 Fetching spare return requests for technician...');
 
+    // First, find the technician record for this user
+    const technicianQuery = `
+      SELECT technician_id FROM technicians WHERE user_id = ?
+    `;
+    
+    const [technicianRecord] = await sequelize.query(technicianQuery, {
+      replacements: [userId],
+      type: QueryTypes.SELECT
+    });
+
+    if (!technicianRecord) {
+      return res.status(404).json({
+        success: false,
+        error: 'Technician record not found for this user'
+      });
+    }
+
+    const technicianId = technicianRecord.technician_id;
+
     let query = `
       SELECT 
-        tsr.return_id,
-        tsr.return_number,
-        tsr.call_id,
-        tsr.technician_id,
-        tsr.service_center_id,
-        tsr.return_status,
-        tsr.return_date,
-        tsr.received_date,
-        tsr.verified_date,
-        tsr.remarks,
-        tsr.created_at,
-        t.name as technician_name,
-        sc.asc_name as service_center_name,
-        (SELECT COUNT(*) FROM technician_spare_return_items 
-         WHERE return_id = tsr.return_id) as item_count
-      FROM technician_spare_returns tsr
-      LEFT JOIN technicians t ON tsr.technician_id = t.technician_id
-      LEFT JOIN service_centers sc ON tsr.service_center_id = sc.asc_id
-      WHERE t.user_id = ?
+        sr.request_id,
+        sr.call_id,
+        sr.spare_request_type,
+        sr.request_reason,
+        sr.status_id,
+        st.status_name,
+        sr.created_at,
+        (SELECT COUNT(*) FROM spare_request_items 
+         WHERE request_id = sr.request_id) as item_count
+      FROM spare_requests sr
+      LEFT JOIN status st ON sr.status_id = st.status_id
+      WHERE sr.requested_source_type = 'technician'
+        AND sr.requested_source_id = ?
     `;
 
-    const replacements = [userId];
+    const replacements = [technicianId];
 
     if (status) {
-      query += ' AND tsr.return_status = ?';
+      query += ' AND st.status_name = ?';
       replacements.push(status);
     }
 
-    query += ' ORDER BY tsr.created_at DESC LIMIT ? OFFSET ?';
-    replacements.push(limit, offset);
+    query += ' ORDER BY sr.created_at DESC OFFSET ? ROWS FETCH NEXT ? ROWS ONLY';
+    replacements.push(offset, limit);
 
     const requests = await sequelize.query(query, {
       replacements,
@@ -290,82 +290,89 @@ router.get('/:returnId', authenticateToken, async (req, res) => {
     const { returnId } = req.params;
     const userId = req.user.id;
 
-    console.log(`📋 Fetching spare return request #${returnId}...`);
+    console.log(`📋 Fetching spare request #${returnId}...`);
 
-    // Check authorization - user must be the technician
+    // Get technician ID for authorization check
+    const technicianQuery = `
+      SELECT technician_id FROM technicians WHERE user_id = ?
+    `;
+    
+    const [technicianRecord] = await sequelize.query(technicianQuery, {
+      replacements: [userId],
+      type: QueryTypes.SELECT
+    });
+
+    if (!technicianRecord) {
+      return res.status(404).json({
+        success: false,
+        error: 'Technician record not found for this user'
+      });
+    }
+
+    const technicianId = technicianRecord.technician_id;
+
+    // Check authorization - request must belong to this technician
     const authCheck = await sequelize.query(`
-      SELECT tsr.return_id
-      FROM technician_spare_returns tsr
-      LEFT JOIN technicians t ON tsr.technician_id = t.technician_id
-      WHERE tsr.return_id = ? AND t.user_id = ?
-    `, { replacements: [returnId, userId], type: QueryTypes.SELECT });
+      SELECT request_id
+      FROM spare_requests
+      WHERE request_id = ? AND requested_source_type = 'technician' AND requested_source_id = ?
+    `, { replacements: [returnId, technicianId], type: QueryTypes.SELECT });
 
     if (!authCheck || authCheck.length === 0) {
-      return res.status(403).json({ error: 'You do not have access to this return request' });
+      return res.status(403).json({ error: 'You do not have access to this spare request' });
     }
 
-    // Fetch return details
-    const returnDetails = await sequelize.query(`
+    // Fetch request details
+    const requestDetails = await sequelize.query(`
       SELECT 
-        tsr.return_id,
-        tsr.return_number,
-        tsr.call_id,
-        tsr.technician_id,
-        tsr.service_center_id,
-        tsr.return_status,
-        tsr.return_date,
-        tsr.received_date,
-        tsr.verified_date,
-        tsr.remarks,
-        tsr.received_remarks,
-        tsr.verified_remarks,
-        tsr.created_at,
-        tsr.updated_at,
-        t.name as technician_name,
-        sc.asc_name as service_center_name
-      FROM technician_spare_returns tsr
-      LEFT JOIN technicians t ON tsr.technician_id = t.technician_id
-      LEFT JOIN service_centers sc ON tsr.service_center_id = sc.asc_id
-      WHERE tsr.return_id = ?
+        sr.request_id,
+        sr.call_id,
+        sr.spare_request_type,
+        sr.request_reason,
+        sr.status_id,
+        st.status_name,
+        sr.created_at,
+        sr.updated_at
+      FROM spare_requests sr
+      LEFT JOIN status st ON sr.status_id = st.status_id
+      WHERE sr.request_id = ?
     `, { replacements: [returnId], type: QueryTypes.SELECT });
 
-    if (!returnDetails || returnDetails.length === 0) {
-      return res.status(404).json({ error: 'Return request not found' });
+    if (!requestDetails || requestDetails.length === 0) {
+      return res.status(404).json({ error: 'Spare request not found' });
     }
 
-    // Fetch return items
+    // Fetch request items
     const items = await sequelize.query(`
       SELECT 
-        tsri.return_item_id,
-        tsri.return_id,
-        tsri.spare_id,
-        tsri.item_type,
-        tsri.requested_qty,
-        tsri.received_qty,
-        tsri.verified_qty,
-        tsri.defect_reason,
-        tsri.condition_on_receipt,
-        tsri.remarks,
-        sp.PART as spare_part_code,
-        sp.DESCRIPTION as spare_description,
-        sp.BRAND as spare_brand
-      FROM technician_spare_return_items tsri
-      LEFT JOIN spare_parts sp ON tsri.spare_id = sp.Id
-      WHERE tsri.return_id = ?
-      ORDER BY tsri.return_item_id
+        sri.id,
+        sri.request_id,
+        sri.spare_id,
+        sri.requested_qty,
+        sri.approved_qty,
+        sri.rejection_reason,
+        sri.unit_price,
+        sri.line_price,
+        sr.PART as spare_part_code,
+        sr.DESCRIPTION as spare_description,
+        sr.BRAND as spare_brand
+      FROM spare_request_items sri
+      LEFT JOIN spare_parts sr ON sri.spare_id = sr.Id
+      WHERE sri.request_id = ?
+      ORDER BY sri.id
     `, { replacements: [returnId], type: QueryTypes.SELECT });
 
     res.json({
       success: true,
-      return: returnDetails[0],
+      request: requestDetails[0],
       items: items,
       itemCount: items.length
     });
 
   } catch (error) {
-    console.error('❌ Error fetching return details:', error);
+    console.error('❌ Error fetching request details:', error);
     res.status(500).json({ 
-      error: 'Failed to fetch return details',
+      error: 'Failed to fetch request details',
       details: error.message 
     });
   }
@@ -373,48 +380,41 @@ router.get('/:returnId', authenticateToken, async (req, res) => {
 
 /**
  * GET /api/technician-spare-returns/service-center/:serviceCenterId
- * Fetch all spare return requests for a service center (for rental returns page)
+ * Fetch all spare return requests FOR a service center (where SC is the recipient)
  */
 router.get('/service-center/:serviceCenterId', authenticateToken, async (req, res) => {
   try {
     const { serviceCenterId } = req.params;
-    const { status = 'submitted', limit = 100, offset = 0 } = req.query;
+    const { status, limit = 100, offset = 0 } = req.query;
 
-    console.log(`📋 Fetching spare return requests for SC #${serviceCenterId} (status: ${status})...`);
+    console.log(`📋 Fetching spare requests for SC #${serviceCenterId}...`);
 
     let query = `
       SELECT 
-        tsr.return_id,
-        tsr.return_number,
-        tsr.call_id,
-        tsr.technician_id,
-        tsr.service_center_id,
-        tsr.return_status,
-        tsr.return_date,
-        tsr.received_date,
-        tsr.verified_date,
-        tsr.remarks,
-        tsr.created_at,
-        t.name as technician_name,
-        t.mobile_no as technician_phone,
-        (SELECT COUNT(*) FROM technician_spare_return_items 
-         WHERE return_id = tsr.return_id AND item_type = 'defective') as defective_count,
-        (SELECT COUNT(*) FROM technician_spare_return_items 
-         WHERE return_id = tsr.return_id AND item_type = 'unused') as unused_count
-      FROM technician_spare_returns tsr
-      LEFT JOIN technicians t ON tsr.technician_id = t.technician_id
-      WHERE tsr.service_center_id = ?
+        sr.request_id,
+        sr.call_id,
+        sr.spare_request_type,
+        sr.request_reason,
+        sr.status_id,
+        st.status_name,
+        sr.created_at,
+        (SELECT COUNT(*) FROM spare_request_items 
+         WHERE request_id = sr.request_id) as item_count
+      FROM spare_requests sr
+      LEFT JOIN status st ON sr.status_id = st.status_id
+      WHERE sr.requested_to_type = 'service_center'
+        AND sr.requested_to_id = ?
     `;
 
     const replacements = [serviceCenterId];
 
     if (status) {
-      query += ' AND tsr.return_status = ?';
+      query += ' AND st.status_name = ?';
       replacements.push(status);
     }
 
-    query += ' ORDER BY tsr.created_at DESC LIMIT ? OFFSET ?';
-    replacements.push(limit, offset);
+    query += ' ORDER BY sr.created_at DESC OFFSET ? ROWS FETCH NEXT ? ROWS ONLY';
+    replacements.push(offset, limit);
 
     const requests = await sequelize.query(query, {
       replacements,
@@ -431,9 +431,9 @@ router.get('/service-center/:serviceCenterId', authenticateToken, async (req, re
     });
 
   } catch (error) {
-    console.error('❌ Error fetching SC spare return requests:', error);
+    console.error('❌ Error fetching SC spare requests:', error);
     res.status(500).json({ 
-      error: 'Failed to fetch spare return requests for service center',
+      error: 'Failed to fetch spare requests for service center',
       details: error.message 
     });
   }
@@ -451,77 +451,212 @@ router.post('/:returnId/receive', authenticateToken, async (req, res) => {
     const userId = req.user.id;
 
     console.log('\n' + '='.repeat(60));
-    console.log('📥 SERVICE CENTER RECEIVING SPARE RETURN');
+    console.log('📥 SERVICE CENTER RECEIVING SPARE REQUEST');
     console.log('='.repeat(60));
 
-    // Verify the request exists and is in correct status
-    const returnReq = await sequelize.query(`
-      SELECT * FROM technician_spare_returns WHERE return_id = ?
+    // Verify the request exists and is in correct status (Pending)
+    const spareReq = await sequelize.query(`
+      SELECT sr.*, st.status_name FROM spare_requests sr
+      LEFT JOIN status st ON sr.status_id = st.status_id
+      WHERE sr.request_id = ?
     `, { replacements: [returnId], type: QueryTypes.SELECT, transaction });
 
-    if (!returnReq || returnReq.length === 0) {
+    if (!spareReq || spareReq.length === 0) {
       await transaction.rollback();
-      return res.status(404).json({ error: 'Return request not found' });
+      return res.status(404).json({ error: 'Spare request not found' });
     }
 
-    if (returnReq[0].return_status !== 'submitted') {
+    if (spareReq[0].status_name !== 'Pending') {
       await transaction.rollback();
       return res.status(400).json({ 
-        error: `Cannot receive - return is in ${returnReq[0].return_status} status` 
+        error: `Cannot receive - request is in ${spareReq[0].status_name} status` 
       });
     }
 
-    console.log(`✅ Return request verified: ${returnReq[0].return_number}`);
+    console.log(`✅ Spare request verified (ID: ${returnId})`);
+
+    const technicianId = spareReq[0].requested_source_id;
+    const serviceCenterId = spareReq[0].requested_to_id;
+
+    console.log(`   Technician ID: ${technicianId}`);
+    console.log(`   Service Center ID: ${serviceCenterId}`);
 
     // Update received quantities for each item
+    let totalApprovedQty = 0;
+    const receivedItems = [];
+
     for (const item of items) {
-      const { returnItemId, receivedQty } = item;
+      const { id, approvedQty } = item;
 
       await sequelize.query(`
-        UPDATE technician_spare_return_items
-        SET received_qty = ?,
+        UPDATE spare_request_items
+        SET approved_qty = ?,
             updated_at = GETDATE()
-        WHERE return_item_id = ?
+        WHERE id = ?
       `, {
-        replacements: [receivedQty, returnItemId],
+        replacements: [approvedQty, id],
+        transaction
+      });
+
+      totalApprovedQty += approvedQty;
+      receivedItems.push(item);
+    }
+
+    // Create stock movement for the return (technician → service center)
+    // NOTE: bucket, bucket_operation, bucket_impact are NOT set here
+    // Each item's condition is tracked in goods_movement_items
+    console.log(`\n📊 Creating stock movement for return...`);
+    if (totalApprovedQty > 0) {
+      try {
+        const movementResult = await sequelize.query(`
+          INSERT INTO stock_movement (
+            stock_movement_type,
+            reference_type,
+            reference_no,
+            source_location_type,
+            source_location_id,
+            destination_location_type,
+            destination_location_id,
+            total_qty,
+            movement_date,
+            created_by,
+            status,
+            created_at,
+            updated_at
+          )
+          VALUES (
+            'TECH_RETURN_TO_SC',
+            'spare_request',
+            'REQ-' + CAST(? AS VARCHAR),
+            'technician',
+            ?,
+            'service_center',
+            ?,
+            ?,
+            GETDATE(),
+            ?,
+            'completed',
+            GETDATE(),
+            GETDATE()
+          );
+          SELECT SCOPE_IDENTITY() as movement_id;
+        `, {
+          replacements: [returnId, technicianId, serviceCenterId, totalApprovedQty, userId],
+          transaction,
+          raw: true
+        });
+
+        let movementId = null;
+        console.log(`   Debug: movementResult length=${movementResult?.length}, type=${typeof movementResult}`);
+        
+        if (Array.isArray(movementResult) && movementResult.length > 1) {
+          const selectResult = movementResult[1];
+          console.log(`   Debug: selectResult=${JSON.stringify(selectResult)}`);
+          if (Array.isArray(selectResult) && selectResult.length > 0) {
+            movementId = selectResult[0].movement_id || Object.values(selectResult[0])[0];
+          }
+        } else if (Array.isArray(movementResult) && movementResult.length === 1) {
+          // Single result case
+          console.log(`   Debug: single result=${JSON.stringify(movementResult[0])}`);
+          movementId = movementResult[0].movement_id || Object.values(movementResult[0])[0];
+        }
+
+        console.log(`   Extracted movementId: ${movementId}`);
+        
+        if (movementId && movementId > 0) {
+          console.log(`   ✅ Stock movement created: ID=${movementId}`);
+          console.log(`      Movement: Technician → Service Center (GOOD)`);
+          console.log(`      Type: TECH_RETURN_TO_SC`);
+          console.log(`      Total Quantity: ${totalApprovedQty}`);
+
+          // Create goods movement items for each spare
+          console.log(`\n📦 Creating goods movement items...`);
+          
+          // Get the spare details for each item
+          for (const item of receivedItems) {
+            const { id, approvedQty } = item;
+            
+            // Get spare_id and condition from spare_request_items
+            const itemDetail = await sequelize.query(`
+              SELECT spare_id, condition FROM spare_request_items WHERE id = ?
+            `, {
+              replacements: [id],
+              type: QueryTypes.SELECT,
+              transaction
+            });
+
+            if (itemDetail && itemDetail.length > 0) {
+              const spareId = itemDetail[0].spare_id;
+              const itemCondition = itemDetail[0].condition || 'good';
+              try {
+                await sequelize.query(`
+                  INSERT INTO goods_movement_items (
+                    movement_id, spare_part_id, qty, condition, created_at, updated_at
+                  ) VALUES (
+                    ?, ?, ?, ?, GETDATE(), GETDATE()
+                  )
+                `, {
+                  replacements: [movementId, spareId, approvedQty, itemCondition],
+                  transaction
+                });
+                console.log(`   ✅ Goods item created: spare_id=${spareId}, qty=${approvedQty}, condition=${itemCondition}`);
+              } catch (gmiErr) {
+                console.error(`   ⚠️  Error creating goods_movement_item for spare ${spareId}:`, gmiErr.message);
+              }
+            }
+          }
+        } else {
+          console.log(`   ⚠️  Stock movement created but no ID returned`);
+        }
+      } catch (mvtErr) {
+        console.error(`   ⚠️  Error creating stock movement:`, mvtErr.message);
+        // Don't fail the entire operation if stock movement fails
+      }
+    }
+
+    // Update request status to 'Approved' (representing received status)
+    const approvedStatus = await sequelize.query(`
+      SELECT TOP 1 status_id FROM status WHERE status_name = 'Approved'
+    `, { type: QueryTypes.SELECT, transaction });
+
+    if (approvedStatus && approvedStatus.length > 0) {
+      await sequelize.query(`
+        UPDATE spare_requests
+        SET status_id = ?,
+            updated_at = GETDATE()
+        WHERE request_id = ?
+      `, {
+        replacements: [approvedStatus[0].status_id, returnId],
         transaction
       });
     }
 
-    // Update return status to received
-    const now = new Date();
-    await sequelize.query(`
-      UPDATE technician_spare_returns
-      SET return_status = 'received',
-          received_date = ?,
-          received_by = ?,
-          received_remarks = ?,
-          updated_at = GETDATE()
-      WHERE return_id = ?
-    `, {
-      replacements: [now, userId, receivedRemarks || null, returnId],
-      transaction
-    });
-
     await transaction.commit();
 
-    console.log(`✅ Spare return received successfully`);
+    console.log(`✅ Spare request received successfully`);
     console.log(`   Items received: ${items.length}`);
+    console.log(`   Total quantity received: ${totalApprovedQty}`);
     console.log(`   Received by: User #${userId}`);
 
     res.json({
       success: true,
-      returnId,
-      status: 'received',
-      message: 'Spare return received successfully',
-      itemsReceived: items.length
+      requestId: returnId,
+      status: 'Approved',
+      message: 'Spare request received successfully with stock movement created',
+      itemsReceived: items.length,
+      totalQuantityReceived: totalApprovedQty,
+      stockMovement: {
+        description: 'Stock movement created: Technician → Service Center',
+        type: 'TECH_RETURN_TO_SC',
+        totalQty: totalApprovedQty
+      }
     });
 
   } catch (error) {
     await transaction.rollback();
-    console.error('❌ Error receiving spare return:', error);
+    console.error('❌ Error receiving spare request:', error);
     res.status(500).json({ 
-      error: 'Failed to receive spare return',
+      error: 'Failed to receive spare request',
       details: error.message 
     });
   }
@@ -539,30 +674,32 @@ router.post('/:returnId/verify', authenticateToken, async (req, res) => {
     const userId = req.user.id;
 
     console.log('\n' + '='.repeat(60));
-    console.log('✓ SERVICE CENTER VERIFYING SPARE RETURN');
+    console.log('✓ SERVICE CENTER VERIFYING SPARE REQUEST');
     console.log('='.repeat(60));
 
-    // Verify the request exists and is in received status
-    const returnReq = await sequelize.query(`
-      SELECT * FROM technician_spare_returns WHERE return_id = ?
+    // Verify the request exists and is in Approved status
+    const spareReq = await sequelize.query(`
+      SELECT sr.*, st.status_name FROM spare_requests sr
+      LEFT JOIN status st ON sr.status_id = st.status_id
+      WHERE sr.request_id = ?
     `, { replacements: [returnId], type: QueryTypes.SELECT, transaction });
 
-    if (!returnReq || returnReq.length === 0) {
+    if (!spareReq || spareReq.length === 0) {
       await transaction.rollback();
-      return res.status(404).json({ error: 'Return request not found' });
+      return res.status(404).json({ error: 'Spare request not found' });
     }
 
-    if (returnReq[0].return_status !== 'received') {
+    if (spareReq[0].status_name !== 'Approved') {
       await transaction.rollback();
       return res.status(400).json({ 
-        error: `Cannot verify - return must be in 'received' status` 
+        error: `Cannot verify - request must be in 'Approved' status` 
       });
     }
 
-    const technicianId = returnReq[0].technician_id;
-    const serviceCenterId = returnReq[0].service_center_id;
+    const technicianId = spareReq[0].requested_source_id;
+    const serviceCenterId = spareReq[0].requested_to_id;
 
-    console.log(`✅ Return request verified: ${returnReq[0].return_number}`);
+    console.log(`✅ Spare request verified (ID: ${returnId})`);
     console.log(`   Technician ID: ${technicianId}`);
     console.log(`   Service Center ID: ${serviceCenterId}`);
 
@@ -570,11 +707,11 @@ router.post('/:returnId/verify', authenticateToken, async (req, res) => {
     console.log('\n💾 Updating inventory...');
 
     for (const item of items) {
-      const { spare_id, verified_qty, item_type } = item;
+      const { spare_id, verified_qty } = item;
 
-      console.log(`\n   Processing: Spare ID ${spare_id} (${item_type}, qty: ${verified_qty})`);
+      console.log(`\n   Processing: Spare ID ${spare_id} (qty: ${verified_qty})`);
 
-      // Get spare details
+      // Get spare details and condition from request items
       const spare = await sequelize.query(`
         SELECT Id, PART, DESCRIPTION FROM spare_parts WHERE Id = ?
       `, { replacements: [spare_id], type: QueryTypes.SELECT, transaction });
@@ -584,14 +721,23 @@ router.post('/:returnId/verify', authenticateToken, async (req, res) => {
         continue;
       }
 
+      // Get the condition from spare_request_items
+      const itemCondition = await sequelize.query(`
+        SELECT condition FROM spare_request_items 
+        WHERE request_id = ? AND spare_id = ?
+      `, { replacements: [returnId, spare_id], type: QueryTypes.SELECT, transaction });
+
+      const condition = (itemCondition && itemCondition.length > 0) ? itemCondition[0].condition : 'good';
       const sparePart = spare[0];
 
-      // 1. Reduce technician inventory (where location_type='technician' and location_id=technicianId)
+      console.log(`     Condition: ${condition}`);
+
+      // 1. Reduce technician inventory (based on condition)
       console.log(`     Step 1: Reducing technician inventory...`);
+      const techUpdateColumn = condition === 'defective' ? 'qty_defective' : 'qty_good';
       const updateTechResult = await sequelize.query(`
         UPDATE spare_inventory
-        SET ${item_type === 'defective' ? 'qty_defective' : 'qty_good'} = 
-            ${item_type === 'defective' ? 'qty_defective' : 'qty_good'} - ?,
+        SET ${techUpdateColumn} = ${techUpdateColumn} - ?,
             updated_at = GETDATE()
         WHERE spare_id = ?
           AND location_type = 'technician'
@@ -601,11 +747,10 @@ router.post('/:returnId/verify', authenticateToken, async (req, res) => {
         transaction
       });
 
-      console.log(`     ✓ Technician inventory reduced by ${verified_qty}`);
+      console.log(`     ✓ Technician ${condition} inventory reduced by ${verified_qty}`);
 
-      // 2. Increase service center inventory (good for unused, defective for defective)
+      // 2. Increase service center inventory (based on condition)
       console.log(`     Step 2: Increasing SC inventory...`);
-      const targetQtyField = item_type === 'defective' ? 'qty_defective' : 'qty_good';
 
       // Check if SC inventory exists for this spare
       const scInv = await sequelize.query(`
@@ -619,11 +764,13 @@ router.post('/:returnId/verify', authenticateToken, async (req, res) => {
         transaction
       });
 
+      const scUpdateColumn = condition === 'defective' ? 'qty_defective' : 'qty_good';
+
       if (scInv && scInv.length > 0) {
         // Update existing inventory
         await sequelize.query(`
           UPDATE spare_inventory
-          SET ${targetQtyField} = ${targetQtyField} + ?,
+          SET ${scUpdateColumn} = ${scUpdateColumn} + ?,
               updated_at = GETDATE()
           WHERE spare_id = ?
             AND location_type = 'service_center'
@@ -632,14 +779,12 @@ router.post('/:returnId/verify', authenticateToken, async (req, res) => {
           replacements: [verified_qty, spare_id, serviceCenterId],
           transaction
         });
-        console.log(`     ✓ SC inventory updated (${item_type}): +${verified_qty}`);
+        console.log(`     ✓ SC ${condition} inventory updated: +${verified_qty}`);
       } else {
         // Create new inventory record
-        const newInvData = {
-          qty_good: item_type === 'defective' ? 0 : verified_qty,
-          qty_defective: item_type === 'defective' ? verified_qty : 0
-        };
-
+        const goodQty = condition === 'good' ? verified_qty : 0;
+        const defectiveQty = condition === 'defective' ? verified_qty : 0;
+        
         await sequelize.query(`
           INSERT INTO spare_inventory (
             spare_id,
@@ -656,60 +801,198 @@ router.post('/:returnId/verify', authenticateToken, async (req, res) => {
             spare_id,
             'service_center',
             serviceCenterId,
-            newInvData.qty_good,
-            newInvData.qty_defective
+            goodQty,
+            defectiveQty
           ],
           transaction
         });
-        console.log(`     ✓ SC inventory created (${item_type}): ${verified_qty}`);
+        console.log(`     ✓ SC inventory created: ${goodQty} good, ${defectiveQty} defective`);
       }
 
-      // Update the return item with verified quantity
+      // Update the request item with verified quantity
       await sequelize.query(`
-        UPDATE technician_spare_return_items
-        SET verified_qty = ?,
+        UPDATE spare_request_items
+        SET approved_qty = ?,
             updated_at = GETDATE()
-        WHERE return_id = ? AND spare_id = ?
+        WHERE request_id = ? AND spare_id = ?
       `, {
         replacements: [verified_qty, returnId, spare_id],
         transaction
       });
     }
 
-    // Update return status to verified
-    const now = new Date();
-    await sequelize.query(`
-      UPDATE technician_spare_returns
-      SET return_status = 'verified',
-          verified_date = ?,
-          verified_by = ?,
-          verified_remarks = ?,
-          updated_at = GETDATE()
-      WHERE return_id = ?
-    `, {
-      replacements: [now, userId, verifiedRemarks || null, returnId],
-      transaction
-    });
+    // Create stock movement for the entire return (technician → service center)
+    // NOTE: bucket, bucket_operation, bucket_impact are NOT set here
+    // Each item's condition is tracked in goods_movement_items
+    console.log('\n📊 Creating stock movement for return...');
+    let totalReturnQty = 0;
+    const movementItems = [];
+
+    for (const item of items) {
+      totalReturnQty += item.verified_qty;
+      movementItems.push(item);
+    }
+
+    if (totalReturnQty > 0) {
+      try {
+        const movementResult = await sequelize.query(`
+          INSERT INTO stock_movement (
+            stock_movement_type,
+            reference_type,
+            reference_no,
+            source_location_type,
+            source_location_id,
+            destination_location_type,
+            destination_location_id,
+            total_qty,
+            movement_date,
+            created_by,
+            status,
+            created_at,
+            updated_at
+          )
+          VALUES (
+            'TECH_RETURN_TO_SC',
+            'spare_request',
+            'REQ-' + CAST(? AS VARCHAR),
+            'technician',
+            ?,
+            'service_center',
+            ?,
+            ?,
+            GETDATE(),
+            ?,
+            'completed',
+            GETDATE(),
+            GETDATE()
+          );
+          SELECT SCOPE_IDENTITY() as movement_id;
+        `, {
+          replacements: [returnId, technicianId, serviceCenterId, totalReturnQty, userId],
+          transaction,
+          raw: true
+        });
+
+        let movementId = null;
+        
+        // Extract SCOPE_IDENTITY() result with multiple fallback patterns
+        console.log('\n🔍 Extracting movement_id from SCOPE_IDENTITY()...');
+        console.log('   Result type:', typeof movementResult, '| Is Array:', Array.isArray(movementResult));
+        if (Array.isArray(movementResult)) {
+          console.log('   Result length:', movementResult.length);
+          console.log('   Result[0]:', JSON.stringify(movementResult[0]?.slice?.(0, 1) || movementResult[0]));
+          if (movementResult.length > 1) {
+            console.log('   Result[1]:', JSON.stringify(movementResult[1]?.slice?.(0, 1) || movementResult[1]));
+          }
+        }
+        
+        // Pattern 1: Multi-statement result with SELECT as [1]
+        if (Array.isArray(movementResult) && movementResult.length > 1) {
+          const selectResult = movementResult[1];
+          if (Array.isArray(selectResult) && selectResult.length > 0 && selectResult[0].movement_id) {
+            movementId = selectResult[0].movement_id;
+          }
+        }
+        
+        // Pattern 2: Fallback - Direct array result
+        if (!movementId && Array.isArray(movementResult) && movementResult.length > 0) {
+          if (movementResult[0]?.movement_id) {
+            movementId = movementResult[0].movement_id;
+          } else {
+            const values = Object.values(movementResult[0] || {});
+            if (values.length > 0 && typeof values[0] === 'number' && values[0] > 0) {
+              movementId = values[0];
+            }
+          }
+        }
+        
+        console.log('   Extracted movementId:', movementId, '| Valid:', movementId && movementId > 0);
+
+        if (movementId && movementId > 0) {
+          console.log(`   ✅ Stock movement created: ID=${movementId}`);
+          console.log(`      Movement: Technician → Service Center (GOOD)`);
+          console.log(`      Type: TECH_RETURN_TO_SC`);
+          console.log(`      Total Quantity: ${totalReturnQty}`);
+
+          // Create goods movement items for each spare
+          console.log(`\n📦 Creating goods movement items...`);
+          for (const item of movementItems) {
+            try {
+              // Get condition from spare_request_items
+              const itemCond = await sequelize.query(`
+                SELECT condition FROM spare_request_items 
+                WHERE request_id = ? AND spare_id = ?
+              `, { replacements: [returnId, item.spare_id], type: QueryTypes.SELECT, transaction });
+              
+              const itemCondition = (itemCond && itemCond.length > 0) ? itemCond[0].condition : 'good';
+              
+              await sequelize.query(`
+                INSERT INTO goods_movement_items (
+                  movement_id, spare_part_id, qty, condition, created_at, updated_at
+                ) VALUES (
+                  ?, ?, ?, ?, GETDATE(), GETDATE()
+                )
+              `, {
+                replacements: [movementId, item.spare_id, item.verified_qty, itemCondition],
+                transaction
+              });
+              console.log(`   ✅ Goods item created: spare_id=${item.spare_id}, qty=${item.verified_qty}, condition=${itemCondition}`);
+            } catch (gmiErr) {
+              console.error(`   ⚠️  Error creating goods_movement_item for spare ${item.spare_id}:`, gmiErr.message);
+            }
+          }
+        } else {
+          console.log(`   ⚠️  Stock movement created but no ID returned`);
+        }
+      } catch (mvtErr) {
+        console.error(`   ⚠️  Error creating stock movement:`, mvtErr.message);
+        // Don't fail the entire operation if stock movement fails
+      }
+    }
+
+    // Update request status to 'Rejected' (mapped as Verified/Completed)
+    const rejectedStatus = await sequelize.query(`
+      SELECT TOP 1 status_id FROM status WHERE status_name = 'Rejected'
+    `, { type: QueryTypes.SELECT, transaction });
+
+    if (rejectedStatus && rejectedStatus.length > 0) {
+      await sequelize.query(`
+        UPDATE spare_requests
+        SET status_id = ?,
+            updated_at = GETDATE()
+        WHERE request_id = ?
+      `, {
+        replacements: [rejectedStatus[0].status_id, returnId],
+        transaction
+      });
+    }
 
     await transaction.commit();
 
-    console.log(`\n✅ Spare return verified successfully`);
+    console.log(`\n✅ Spare request verified successfully`);
     console.log(`   Items verified: ${items.length}`);
+    console.log(`   Total quantity returned: ${totalReturnQty}`);
     console.log(`   Verified by: User #${userId}`);
 
     res.json({
       success: true,
-      returnId,
-      status: 'verified',
-      message: 'Spare return verified successfully',
-      itemsVerified: items.length
+      requestId: returnId,
+      status: 'Rejected',
+      message: 'Spare request verified successfully with stock movement',
+      itemsVerified: items.length,
+      totalQuantityReturned: totalReturnQty,
+      stockMovement: {
+        description: 'Stock movement created: Technician → Service Center',
+        type: 'TECH_RETURN_TO_SC',
+        totalQty: totalReturnQty
+      }
     });
 
   } catch (error) {
     await transaction.rollback();
-    console.error('❌ Error verifying spare return:', error);
+    console.error('❌ Error verifying spare request:', error);
     res.status(500).json({ 
-      error: 'Failed to verify spare return',
+      error: 'Failed to verify spare request',
       details: error.message 
     });
   }
@@ -725,54 +1008,63 @@ router.post('/:returnId/cancel', authenticateToken, async (req, res) => {
     const { returnId } = req.params;
     const { reason } = req.body;
 
-    console.log(`🚫 Cancelling spare return request #${returnId}...`);
+    console.log(`🚫 Cancelling spare request #${returnId}...`);
 
-    const returnReq = await sequelize.query(`
-      SELECT return_status FROM technician_spare_returns WHERE return_id = ?
+    // Get current status name
+    const spareReq = await sequelize.query(`
+      SELECT sr.*, st.status_name FROM spare_requests sr
+      LEFT JOIN status st ON sr.status_id = st.status_id
+      WHERE sr.request_id = ?
     `, { replacements: [returnId], type: QueryTypes.SELECT, transaction });
 
-    if (!returnReq || returnReq.length === 0) {
+    if (!spareReq || spareReq.length === 0) {
       await transaction.rollback();
-      return res.status(404).json({ error: 'Return request not found' });
+      return res.status(404).json({ error: 'Spare request not found' });
     }
 
-    const currentStatus = returnReq[0].return_status;
-    const cancellableStatuses = ['draft', 'submitted'];
+    const currentStatus = spareReq[0].status_name;
+    const cancellableStatuses = ['Pending', 'Approved'];
 
     if (!cancellableStatuses.includes(currentStatus)) {
       await transaction.rollback();
       return res.status(400).json({ 
-        error: `Cannot cancel return in '${currentStatus}' status. Only draft and submitted can be cancelled.` 
+        error: `Cannot cancel request in '${currentStatus}' status. Only Pending and Approved can be cancelled.` 
       });
     }
 
-    await sequelize.query(`
-      UPDATE technician_spare_returns
-      SET return_status = 'cancelled',
-          remarks = CONCAT(ISNULL(remarks, ''), ' | Cancelled: ' + ?),
-          updated_at = GETDATE()
-      WHERE return_id = ?
-    `, {
-      replacements: [reason || 'No reason provided', returnId],
-      transaction
-    });
+    // Get Cancelled status
+    const cancelledStatus = await sequelize.query(`
+      SELECT TOP 1 status_id FROM status WHERE status_name = 'Cancelled'
+    `, { type: QueryTypes.SELECT, transaction });
+
+    if (cancelledStatus && cancelledStatus.length > 0) {
+      await sequelize.query(`
+        UPDATE spare_requests
+        SET status_id = ?,
+            updated_at = GETDATE()
+        WHERE request_id = ?
+      `, {
+        replacements: [cancelledStatus[0].status_id, returnId],
+        transaction
+      });
+    }
 
     await transaction.commit();
 
-    console.log(`✅ Return request cancelled successfully`);
+    console.log(`✅ Spare request cancelled successfully`);
 
     res.json({
       success: true,
-      returnId,
-      status: 'cancelled',
-      message: 'Spare return request cancelled successfully'
+      requestId: returnId,
+      status: 'Cancelled',
+      message: 'Spare request cancelled successfully'
     });
 
   } catch (error) {
     await transaction.rollback();
-    console.error('❌ Error cancelling return request:', error);
+    console.error('❌ Error cancelling request:', error);
     res.status(500).json({ 
-      error: 'Failed to cancel return request',
+      error: 'Failed to cancel spare request',
       details: error.message 
     });
   }

@@ -8,7 +8,9 @@ import {
   Technicians,
 } from '../models/index.js';
 import { sequelize } from '../db.js';
+import { safeRollback, safeCommit, isTransactionActive } from '../utils/transactionHelper.js';
 import { recordCallSpareUsage } from '../services/callSpareUsageService.js';
+import { authenticateToken } from '../middleware/auth.js';
 
 const router = express.Router();
 
@@ -55,12 +57,12 @@ router.get('/spare-consumption', async (req, res) => {
 });
 
 /**
- * GET /api/technician-tracking/spare-consumption/call/:callId
+ * GET /api/technician-tracking/spare-consumption/call/:call_id
  * Get spare consumption for a specific call
  */
-router.get('/spare-consumption/call/:callId', async (req, res) => {
+router.get('/spare-consumption/call/:call_id', async (req, res) => {
   try {
-    const { callId } = req.params;
+    const { call_id } = req.params;
 
     const [records] = await sequelize.query(`
       SELECT 
@@ -81,15 +83,15 @@ router.get('/spare-consumption/call/:callId', async (req, res) => {
       FROM call_spare_usage csu
       LEFT JOIN SparePart sp ON csu.spare_part_id = sp.Id
       LEFT JOIN users u ON csu.used_by_tech_id = u.user_id
-      WHERE csu.call_id = :callId
+      WHERE csu.call_id = :call_id
       ORDER BY csu.created_at DESC
     `, {
-      replacements: { callId: parseInt(callId) },
+      replacements: { call_id: parseInt(call_id) },
     });
 
     res.json({
       ok: true,
-      callId: parseInt(callId),
+      call_id: parseInt(call_id),
       count: records.length,
       data: records,
     });
@@ -106,64 +108,149 @@ router.get('/spare-consumption/call/:callId', async (req, res) => {
  * POST /api/technician-tracking/spare-consumption
  * Create a new spare consumption record with defective tracking
  * 
+ * ⚡ KEY CONCEPT: issued_qty comes from spare_request_items.approved_qty (approval process)
+ * User does NOT provide issued_qty - it's auto-looked up from the approved spare request
+ * 
  * Request body:
  * {
  *   call_id: number,
  *   spare_part_id: number,
- *   issued_qty: number,
- *   used_qty: number,           // Qty of spare part used to replace defective part
- *   returned_qty?: number,       // Qty to be returned (default: issued_qty - used_qty)
- *   used_by_tech_id: number,
+ *   used_qty: number,            // Qty of spare part used to replace defective part
+ *   returned_qty?: number,        // Qty to be returned (default: issued_qty - used_qty)
+ *   used_by_tech_id?: number,     // Optional, auto-detected from call if not provided
  *   remarks?: string
  * }
+ * 
+ * Data Flow:
+ * 1. User requests spares from Service Center
+ * 2. SC approves with specific quantities → stored in spare_request_items.approved_qty
+ * 3. This endpoint looks up the approved_qty for this spare_part_id
+ * 4. Uses that as issued_qty (what was issued from SC to technician)
+ * 5. Validates used_qty <= approved_qty
+ * 6. Tracks defective parts: qty_good decreases, qty_defective increases
  * 
  * When used_qty > 0, the defective part (removed during replacement) is tracked:
  * - spare_inventory.qty_defective increases by used_qty
  * - spare_inventory.qty_good decreases by used_qty
  */
 router.post('/spare-consumption', async (req, res) => {
-  const transaction = await sequelize.transaction();
-  
+  let transaction;
   try {
-    const {
-      call_id,
-      spare_part_id,
-      issued_qty,
-      used_qty,
-      returned_qty,
-      used_by_tech_id,
-      remarks,
-    } = req.body;
+    // Accept both camelCase and snake_case for input parameters
+    const call_id = req.body.call_id;
+    const spare_part_id = req.body.spare_part_id;
+    const used_qty = req.body.used_qty;
+    const returned_qty = req.body.returned_qty;
+    const used_by_tech_id = req.body.used_by_tech_id;
+    const remarks = req.body.remarks;
 
-    if (!call_id || !spare_part_id || !issued_qty) {
-      await transaction.rollback();
+    // ✅ STEP 1: Validate required fields BEFORE transaction
+    // Note: issued_qty is NOT required from user - will be looked up from approval
+    if (!call_id || !spare_part_id) {
       return res.status(400).json({
         ok: false,
-        error: 'Missing required fields: call_id, spare_part_id, issued_qty',
+        error: 'Missing required fields: call_id, spare_part_id',
+        received: {
+          call_id,
+          spare_part_id,
+          used_qty,
+          returned_qty,
+          used_by_tech_id,
+          remarks
+        }
       });
     }
 
-    // Get technician ID from call if not provided
+    // ✅ STEP 2: Validate spare part exists BEFORE transaction
+    console.log(`\n🔍 Validating spare part ID ${spare_part_id}...`);
+    const [spareExists] = await sequelize.query(
+      `SELECT Id, PART, DESCRIPTION FROM spare_parts WHERE Id = ?`,
+      { replacements: [spare_part_id] }
+    );
+
+    if (!spareExists || spareExists.length === 0) {
+      // Fetch available spare IDs for helpful error message
+      const [availableSpares] = await sequelize.query(
+        `SELECT TOP 10 Id, PART, DESCRIPTION FROM spare_parts WHERE Id IS NOT NULL ORDER BY Id`
+      );
+      
+      const spareList = availableSpares.map(s => `${s.Id} (${s.PART})`).join(', ');
+      
+      return res.status(400).json({
+        ok: false,
+        error: `Spare part ID ${spare_part_id} does not exist in database`,
+        availableSpareIds: availableSpares.map(s => ({ id: s.Id, code: s.PART, description: s.DESCRIPTION })),
+        availableIdsString: spareList,
+        suggestion: `Use one of these valid spare IDs: ${spareList}`
+      });
+    }
+
+    console.log(`✅ Spare part validated: ${spareExists[0].PART} - ${spareExists[0].DESCRIPTION}`);
+
+    // ✅ STEP 3: Get technician ID from call BEFORE transaction (no transaction param)
+    const [callData] = await sequelize.query(
+      `SELECT assigned_tech_id FROM calls WHERE call_id = ?`,
+      { replacements: [call_id] }
+    );
+
     let technicianId = used_by_tech_id;
     if (!technicianId) {
-      const [callData] = await sequelize.query(
-        `SELECT assigned_tech_id FROM calls WHERE call_id = ?`,
-        { replacements: [call_id], transaction }
-      );
       if (callData && callData.length > 0) {
         technicianId = callData[0].assigned_tech_id;
       }
     }
 
     if (!technicianId) {
-      await transaction.rollback();
       return res.status(400).json({
         ok: false,
         error: 'Technician ID not found. Provide used_by_tech_id or ensure call has assigned_tech_id',
       });
     }
 
+    // ✅ STEP 4: LOOKUP approved_qty from spare_request_items for THIS CALL
+    // Find the approved spare request for this specific call with this spare_part_id
+    console.log(`\n🔎 Looking up approved spare request for this call...`);
+    
+    const [approvalData] = await sequelize.query(`
+      SELECT TOP 1
+        sri.approved_qty,
+        sr.request_id,
+        sr.call_id
+      FROM spare_request_items sri
+      INNER JOIN spare_requests sr ON sri.request_id = sr.request_id
+      WHERE sr.call_id = ?
+        AND sri.spare_id = ?
+        AND sri.approved_qty > 0
+      ORDER BY sr.created_at DESC
+    `, {
+      replacements: [call_id, spare_part_id]
+    });
+
+    // Use approved_qty if found, otherwise use issued_qty from request body
+    let issued_qty = req.body.issued_qty;
+    
+    if (approvalData && approvalData.length > 0) {
+      issued_qty = approvalData[0].approved_qty;
+      console.log(`✅ Found approved spare request for this call (Request ID: ${approvalData[0].request_id})`);
+      console.log(`   Approved Qty (issued to technician): ${issued_qty}`);
+    } else {
+      console.log(`⚠️  No approved spare request found for this call. Using issued_qty from request body: ${issued_qty}`);
+    }
+
+    // ✅ STEP 5: Validate used_qty <= issued_qty
     const finalUsedQty = used_qty || 0;
+    if (finalUsedQty > issued_qty) {
+      return res.status(400).json({
+        ok: false,
+        error: `Used quantity (${finalUsedQty}) exceeds issued quantity (${issued_qty})`,
+        explanation: 'Cannot use more spares than what was issued',
+        received: { used_qty: finalUsedQty, issued_qty }
+      });
+    }
+
+    // ✅ STEP 6: NOW start the transaction for actual database modifications
+    transaction = await sequelize.transaction();
+
     const finalReturnedQty = returned_qty !== undefined ? returned_qty : (issued_qty - finalUsedQty);
     const usage_status = finalUsedQty === 0 ? 'NOT_USED' : finalUsedQty < issued_qty ? 'PARTIAL' : 'USED';
 
@@ -171,10 +258,11 @@ router.post('/spare-consumption', async (req, res) => {
     console.log('📝 RECORDING SPARE CONSUMPTION WITH DEFECTIVE TRACKING');
     console.log('='.repeat(70));
     console.log(`Call ID: ${call_id}`);
-    console.log(`Spare Part ID: ${spare_part_id}`);
-    console.log(`Issued Qty: ${issued_qty}`);
-    console.log(`Used Qty (defective to be returned): ${finalUsedQty}`);
+    console.log(`Spare Part ID: ${spare_part_id} (${spareExists[0].PART})`);
+    console.log(`Issued Qty (from approved request): ${issued_qty}`);
+    console.log(`Used Qty (defective replaced): ${finalUsedQty}`);
     console.log(`Returned Qty: ${finalReturnedQty}`);
+    console.log(`Usage Status: ${usage_status}`);
     console.log(`Technician ID: ${technicianId}`);
 
     // Step 1: Record usage in call_spare_usage
@@ -256,29 +344,13 @@ router.post('/spare-consumption', async (req, res) => {
       console.log(`      - qty_defective increased by ${finalUsedQty}`);
     }
 
-    // Step 3: Create stock movement record for audit trail (optional - table may not exist)
+    // Step 3: Stock movement will be created when call is closed (in /call/:call_id/close endpoint)
+    // So no need to create it here
     if (finalUsedQty > 0) {
-      try {
-        await sequelize.query(`
-          INSERT INTO stock_movements (
-            spare_id, location_type, location_id, movement_type, 
-            quantity, reference_type, reference_id, created_at, updated_at
-          ) VALUES (
-            ?, 'technician', ?, 'DEFECTIVE_TRACKED',
-            ?, 'call_spare_usage', ?, GETDATE(), GETDATE()
-          )
-        `, {
-          replacements: [spare_part_id, technicianId, finalUsedQty, usageId],
-          transaction
-        });
-        console.log(`   ✅ Movement record created (DEFECTIVE_TRACKED)`);
-      } catch (mvtErr) {
-        // Stock movements table might not exist, but it's not critical
-        console.log(`   ⚠️ Stock movement not recorded: ${mvtErr.message.substring(0, 50)}...`);
-      }
+      console.log(`   ℹ️  Stock movement will be created when call is closed`);
     }
 
-    await transaction.commit();
+    await safeCommit(transaction);
     console.log(`\n✅ Spare consumption recorded successfully\n`);
 
     res.json({
@@ -288,7 +360,11 @@ router.post('/spare-consumption', async (req, res) => {
       data: {
         call_id,
         spare_part_id,
-        issued_qty,
+        spare_name: spareExists[0].PART,
+        issued_qty,                        // From approved spare request or request body
+        issued_qty_source: approvalData && approvalData.length > 0 
+          ? `Request ${approvalData[0].request_id}` 
+          : `From request body`,
         used_qty: finalUsedQty,
         returned_qty: finalReturnedQty,
         usage_status,
@@ -298,7 +374,7 @@ router.post('/spare-consumption', async (req, res) => {
       },
     });
   } catch (err) {
-    await transaction.rollback();
+    await safeRollback(transaction, err);
     console.error('❌ Error creating spare consumption:', err);
     res.status(500).json({
       ok: false,
@@ -344,12 +420,12 @@ router.get('/tat-tracking', async (req, res) => {
 });
 
 /**
- * GET /api/technician-tracking/tat-tracking/call/:callId
+ * GET /api/technician-tracking/tat-tracking/call/:call_id
  * Get TAT tracking for a specific call
  */
-router.get('/tat-tracking/call/:callId', async (req, res) => {
+router.get('/tat-tracking/call/:call_id', async (req, res) => {
   try {
-    const { callId } = req.params;
+    const { call_id } = req.params;
 
     const [records] = await sequelize.query(`
       SELECT 
@@ -364,9 +440,9 @@ router.get('/tat-tracking/call/:callId', async (req, res) => {
         tt.created_at
       FROM tat_tracking tt
       LEFT JOIN calls c ON tt.call_id = c.call_id
-      WHERE tt.call_id = :callId
+      WHERE tt.call_id = :call_id
     `, {
-      replacements: { callId: parseInt(callId) },
+      replacements: { call_id: parseInt(call_id) },
     });
 
     if (records.length === 0) {
@@ -480,12 +556,12 @@ router.get('/tat-holds', async (req, res) => {
 });
 
 /**
- * GET /api/technician-tracking/tat-holds/call/:callId
+ * GET /api/technician-tracking/tat-holds/call/:call_id
  * Get TAT holds for a specific call
  */
-router.get('/tat-holds/call/:callId', async (req, res) => {
+router.get('/tat-holds/call/:call_id', async (req, res) => {
   try {
-    const { callId } = req.params;
+    const { call_id } = req.params;
 
     const [records] = await sequelize.query(`
       SELECT 
@@ -501,15 +577,15 @@ router.get('/tat-holds/call/:callId', async (req, res) => {
         th.created_at
       FROM tat_holds th
       LEFT JOIN users u ON th.created_by = u.user_id
-      WHERE th.call_id = :callId
+      WHERE th.call_id = :call_id
       ORDER BY th.created_at DESC
     `, {
-      replacements: { callId: parseInt(callId) },
+      replacements: { call_id: parseInt(call_id) },
     });
 
     res.json({
       ok: true,
-      callId: parseInt(callId),
+      call_id: parseInt(call_id),
       count: records.length,
       data: records,
     });
@@ -580,18 +656,21 @@ router.post('/tat-holds', async (req, res) => {
 });
 
 /**
- * PUT /api/technician-tracking/tat-holds/:holdId/resolve
- * Resolve (close) a TAT hold
+ * PUT /api/technician-tracking/tat-holds/:hold_id/resolve
+ * Resolve (close) a TAT hold and update TAT tracking with hold duration
  */
-router.put('/tat-holds/:holdId/resolve', async (req, res) => {
+router.put('/tat-holds/:hold_id/resolve', async (req, res) => {
+  let transaction;
   try {
-    const { holdId } = req.params;
+    transaction = await sequelize.transaction();
+    const { hold_id } = req.params;
 
+    // Step 1: Update the hold end time
     const sql = `
       UPDATE tat_holds
       SET hold_end_time = GETDATE(),
           updated_at = GETDATE()
-      WHERE tat_holds_id = :holdId;
+      WHERE tat_holds_id = :hold_id;
       
       SELECT 
         tat_holds_id,
@@ -601,26 +680,76 @@ router.put('/tat-holds/:holdId/resolve', async (req, res) => {
         hold_end_time,
         DATEDIFF(MINUTE, hold_start_time, hold_end_time) as hold_duration_minutes
       FROM tat_holds
-      WHERE tat_holds_id = :holdId;
+      WHERE tat_holds_id = :hold_id;
     `;
 
     const [result] = await sequelize.query(sql, {
-      replacements: { holdId: parseInt(holdId) },
+      replacements: { hold_id: parseInt(hold_id) },
+      transaction
     });
 
     if (!result || result.length === 0) {
+      await transaction.rollback();
       return res.status(404).json({
         ok: false,
         error: 'TAT hold not found',
       });
     }
 
+    const holdData = result[0];
+    const holdDurationMinutes = holdData.hold_duration_minutes || 0;
+    const callId = holdData.call_id;
+
+    console.log(`\n⏸️ RESOLVING TAT HOLD`);
+    console.log(`Hold ID: ${hold_id}`);
+    console.log(`Hold Duration: ${holdDurationMinutes} minutes`);
+    console.log(`Call ID: ${callId}`);
+
+    // Step 2: Update tat_tracking with total hold minutes
+    try {
+      const [tatUpdateResult] = await sequelize.query(`
+        UPDATE tat_tracking
+        SET total_hold_minutes = ISNULL(total_hold_minutes, 0) + ?,
+            updated_at = GETDATE()
+        WHERE call_id = ?;
+        
+        SELECT 
+          id,
+          call_id,
+          total_hold_minutes,
+          DATEDIFF(MINUTE, tat_start_time, ISNULL(tat_end_time, GETDATE())) as elapsed_minutes
+        FROM tat_tracking
+        WHERE call_id = ?
+      `, {
+        replacements: [holdDurationMinutes, callId, callId],
+        transaction
+      });
+
+      if (tatUpdateResult && tatUpdateResult.length > 0) {
+        const tatData = tatUpdateResult[0];
+        console.log(`✅ TAT tracking updated:`);
+        console.log(`   Total Hold Minutes: ${tatData.total_hold_minutes}`);
+        console.log(`   Elapsed Minutes: ${tatData.elapsed_minutes}`);
+      }
+    } catch (tatErr) {
+      console.error(`⚠️ Error updating TAT tracking:`, tatErr.message);
+      // Don't fail if TAT update fails
+    }
+
+    await safeCommit(transaction);
+    console.log(`✅ TAT hold resolved\n`);
+
     res.json({
       ok: true,
       message: 'TAT hold resolved',
-      data: result[0],
+      data: {
+        ...holdData,
+        tat_updated: true,
+        message: `Hold resolved. Hold duration (${holdDurationMinutes} minutes) added to TAT's total_hold_minutes`
+      },
     });
   } catch (err) {
+    await safeRollback(transaction, err);
     console.error('Error resolving TAT hold:', err);
     res.status(500).json({
       ok: false,
@@ -630,12 +759,12 @@ router.put('/tat-holds/:holdId/resolve', async (req, res) => {
 });
 
 /**
- * GET /api/technician-tracking/summary/:callId
+ * GET /api/technician-tracking/summary/:call_id
  * Get full summary of call including spares consumed, TAT tracking, and holds
  */
-router.get('/summary/:callId', async (req, res) => {
+router.get('/summary/:call_id', async (req, res) => {
   try {
-    const { callId } = req.params;
+    const { call_id } = req.params;
 
     // Get spare consumption
     const [spareConsumption] = await sequelize.query(`
@@ -643,16 +772,16 @@ router.get('/summary/:callId', async (req, res) => {
         csu.usage_id,
         csu.spare_part_id,
         sp.PART as spare_name,
-        sp.BRAND,
+        sp.DESCRIPTION,
         csu.issued_qty,
         csu.used_qty,
         csu.returned_qty,
         csu.usage_status
       FROM call_spare_usage csu
-      LEFT JOIN SparePart sp ON csu.spare_part_id = sp.Id
-      WHERE csu.call_id = :callId
+      LEFT JOIN spare_parts sp ON csu.spare_part_id = sp.Id
+      WHERE csu.call_id = :call_id
     `, {
-      replacements: { callId: parseInt(callId) },
+      replacements: { call_id: parseInt(call_id) },
     });
 
     // Get TAT tracking
@@ -671,9 +800,9 @@ router.get('/summary/:callId', async (req, res) => {
           ELSE 'In Progress'
         END as status_label
       FROM tat_tracking tt
-      WHERE tt.call_id = :callId
+      WHERE tt.call_id = :call_id
     `, {
-      replacements: { callId: parseInt(callId) },
+      replacements: { call_id: parseInt(call_id) },
     });
 
     // Get TAT holds
@@ -687,15 +816,15 @@ router.get('/summary/:callId', async (req, res) => {
                DATEDIFF(MINUTE, th.hold_start_time, GETDATE())) as hold_duration_minutes,
         CASE WHEN th.hold_end_time IS NULL THEN 'ACTIVE' ELSE 'RESOLVED' END as hold_status
       FROM tat_holds th
-      WHERE th.call_id = :callId
+      WHERE th.call_id = :call_id
       ORDER BY th.created_at DESC
     `, {
-      replacements: { callId: parseInt(callId) },
+      replacements: { call_id: parseInt(call_id) },
     });
 
     res.json({
       ok: true,
-      callId: parseInt(callId),
+      call_id: parseInt(call_id),
       summary: {
         spares: {
           count: spareConsumption.length,
@@ -723,7 +852,7 @@ router.get('/summary/:callId', async (req, res) => {
 });
 
 /**
- * POST /api/technician-tracking/call/:callId/close
+ * POST /api/technician-tracking/call/:call_id/close
  * Close a call and trigger stock movements for spare usage tracking
  * 
  * When a call is closed:
@@ -741,21 +870,22 @@ router.get('/summary/:callId', async (req, res) => {
  *   "status": "CLOSED" | "REPAIR_CLOSED"
  * }
  */
-router.post('/call/:callId/close', async (req, res) => {
-  const transaction = await sequelize.transaction();
-  
+router.post('/call/:call_id/close', authenticateToken, async (req, res) => {
+  let transaction;
   try {
-    const { callId } = req.params;
-    const { technician_id, status = 'CLOSED' } = req.body;
+    transaction = await sequelize.transaction();
+    const { call_id } = req.params;
+    const { technician_id } = req.body;
+    const userId = req.user?.id;
 
     console.log('\n' + '='.repeat(70));
     console.log('📋 CLOSING CALL - PROCESSING SPARE USAGE');
     console.log('='.repeat(70));
-    console.log(`Call ID: ${callId}`);
+    console.log(`Call ID: ${call_id}`);
     console.log(`Technician ID: ${technician_id}`);
-    console.log(`New Status: ${status}`);
-
-    // Step 1: Get all spare usage records for this call with used_qty > 0
+    console.log(`Closed By User ID: ${userId}`);
+    console.log(`New Status: CLOSED (status_id=8)`);
+    // Step 1: Get all spare usage records for this call (both with used_qty and those needing auto-calculation)
     console.log('\n1️⃣ Getting spare usage records...');
     const usageRecords = await sequelize.query(`
       SELECT 
@@ -764,26 +894,73 @@ router.post('/call/:callId/close', async (req, res) => {
         spare_part_id,
         issued_qty,
         used_qty,
-        returned_qty,
+        ISNULL(returned_qty, 0) as returned_qty,
         usage_status,
         used_by_tech_id
       FROM call_spare_usage
-      WHERE call_id = ? AND used_qty > 0
+      WHERE call_id = ?
       ORDER BY usage_id DESC
     `, {
-      replacements: [callId],
+      replacements: [call_id],
       transaction
     });
 
-    const spareUsages = usageRecords[0] || [];
-    console.log(`   Found ${spareUsages.length} spare usage record(s) with used_qty > 0`);
+    let spareUsages = usageRecords[0] || [];
+    
+    // Auto-calculate used_qty for ALL spares where used_qty is 0 but issued > returned
+    const allSpares = spareUsages.map(usage => {
+      if (usage.used_qty === 0 || usage.used_qty === null) {
+        // Calculate used_qty = issued_qty - returned_qty
+        const calculatedUsedQty = (usage.issued_qty || 0) - (usage.returned_qty || 0);
+        if (calculatedUsedQty > 0) {
+          console.log(`   ℹ️  Auto-calculated used_qty for spare_part_id=${usage.spare_part_id}: ${calculatedUsedQty} (issued=${usage.issued_qty}, returned=${usage.returned_qty})`);
+          return { ...usage, used_qty: calculatedUsedQty };
+        } else {
+          console.log(`   ℹ️  Spare_part_id=${usage.spare_part_id} was NOT used (issued=${usage.issued_qty}, returned=${usage.returned_qty})`);
+          return { ...usage, used_qty: 0 };
+        }
+      }
+      return usage;
+    });
+    
+    console.log(`   Found ${allSpares.length} spare usage record(s) total`);
+    
+    // Filter for spares with used_qty > 0 for stock movement
+    const usedSpares = allSpares.filter(u => u.used_qty > 0);
+    console.log(`   ${usedSpares.length} spare(s) with used_qty > 0 will create stock movement`);
 
-    // Step 2: Calculate total quantity and get technician ID
+    // Update call_spare_usage records with calculated used_qty and usage_status for ALL spares
+    for (const usage of allSpares) {
+      if (!usage.usage_id) continue;
+      try {
+        // Determine usage_status based on used_qty
+        const usageStatus = usage.used_qty > 0 ? 'USED' : 'NOT_USED';
+        
+        await sequelize.query(`
+          UPDATE call_spare_usage
+          SET used_qty = ?, usage_status = ?, updated_at = GETDATE()
+          WHERE usage_id = ?
+        `, {
+          replacements: [usage.used_qty, usageStatus, usage.usage_id],
+          transaction
+        });
+        
+        if (usageStatus === 'NOT_USED') {
+          console.log(`   ✅ Updated usage_id=${usage.usage_id}: marked as NOT_USED`);
+        } else {
+          console.log(`   ✅ Updated usage_id=${usage.usage_id}: marked as USED (used_qty=${usage.used_qty})`);
+        }
+      } catch (updateErr) {
+        console.error(`   ⚠️  Could not update usage_id ${usage.usage_id}:`, updateErr.message);
+      }
+    }
+
+    // Step 2: Calculate total quantity and get technician ID using the USED spares only for movement
     let totalUsedQty = 0;
     let technicianId = technician_id;
     const itemsForMovement = [];
 
-    for (const usage of spareUsages) {
+    for (const usage of usedSpares) {
       totalUsedQty += usage.used_qty;
       
       // Use technician from first record if not provided in request
@@ -801,16 +978,16 @@ router.post('/call/:callId/close', async (req, res) => {
     let inventoryUpdated = 0;
 
     // Step 3: Create ONE single stock movement for the call closure
-    // This moves spares from technician's GOOD bucket to DEFECTIVE bucket (internal transfer)
+    // This moves spares from technician's GOOD to DEFECTIVE (internal transfer)
+    // NOTE: bucket, bucket_operation, bucket_impact are NOT set here
+    // Each item's condition is tracked in goods_movement_items
     if (totalUsedQty > 0 && technicianId) {
       console.log(`\n2️⃣ Creating SINGLE stock movement (technician internal transfer)...`);
       
       try {
-        const [movementResult] = await sequelize.query(`
+        const result = await sequelize.query(`
           INSERT INTO stock_movement (
             stock_movement_type,
-            bucket,
-            bucket_operation,
             reference_type,
             reference_no,
             source_location_type,
@@ -826,8 +1003,6 @@ router.post('/call/:callId/close', async (req, res) => {
           )
           VALUES (
             'DEFECTIVE_MARKING',
-            'GOOD',
-            'DECREASE',
             'call_spare_usage',
             'CALL-' + CAST(? AS VARCHAR),
             'technician',
@@ -843,18 +1018,48 @@ router.post('/call/:callId/close', async (req, res) => {
           );
           SELECT SCOPE_IDENTITY() as movement_id;
         `, {
-          replacements: [callId, technicianId, technicianId, totalUsedQty, technician_id || null],
+          replacements: [call_id, technicianId, technicianId, totalUsedQty, technician_id || null],
           transaction,
-          raw: true
+          raw: true,
+          nest: false
         });
         
-        movementId = movementResult?.[0]?.movement_id;
+        // Extract movement_id from SCOPE_IDENTITY() result
+        // Sequelize patterns:
+        // Pattern 1: result = [[{movement_id: X}]] for multi-statement with raw:true
+        // Pattern 2: result = [{movement_id: X}] for single select with raw:true
+        let movementIdValue = null;
         
-        if (movementId) {
-          console.log(`   ✅ Stock movement created: ID=${movementId} (technician→technician internal transfer)`);
-          console.log(`      Type: DEFECTIVE_MARKING | Qty: ${totalUsedQty}`);
+        console.log(`   Debug: result type=${typeof result}, isArray=${Array.isArray(result)}, length=${result?.length}`);
+        
+        if (Array.isArray(result)) {
+          // Try to find SCOPE_IDENTITY value in result
+          if (result.length > 1) {
+            // Multi-statement result: [[INSERT result], [SELECT result]]
+            const selectResult = result[1];
+            console.log(`   Debug: selectResult=${JSON.stringify(selectResult)}`);
+            if (Array.isArray(selectResult) && selectResult.length > 0) {
+              movementIdValue = selectResult[0].movement_id || Object.values(selectResult[0])[0];
+            }
+          } else if (result.length === 1 && result[0]) {
+            // Single result with multiple columns, first one is SCOPE_IDENTITY
+            console.log(`   Debug: result[0]=${JSON.stringify(result[0])}`);
+            movementIdValue = result[0].movement_id || Object.values(result[0])[0];
+          }
+        }
+        
+        movementId = movementIdValue;
+        
+        console.log(`   📊 Stock movement inserted`);
+        console.log(`      Movement ID: ${movementId || '(failed to extract)'}`);
+        
+        if (movementId && movementId > 0) {
+          console.log(`   ✅ Stock movement created: ID=${movementId}`);
+          console.log(`      Movement: GOOD → DEFECTIVE (technician inventory)`);
+          console.log(`      Type: DEFECTIVE_MARKING | Operation: TRANSFER_TO_DEFECTIVE`);
+          console.log(`      Quantity: ${totalUsedQty} | Technician: ${technicianId}`);
         } else {
-          console.log(`   ⚠️  Stock movement created but no ID returned`);
+          console.log(`   ⚠️  Stock movement created but no ID returned. Value: ${movementId}`);
         }
       } catch (mvtErr) {
         console.error(`   ⚠️  Error creating stock movement:`, mvtErr.message);
@@ -936,35 +1141,96 @@ router.post('/call/:callId/close', async (req, res) => {
       console.log(`\n2️⃣ No spares with used_qty > 0, skipping stock movement creation`);
     }
 
-    // Step 6: Update call status to CLOSED/REPAIR_CLOSED
-    console.log(`\n5️⃣ Updating call status to ${status}...`);
+    // Step 5: Update TAT tracking - Set end time when call closes
+    console.log(`\n5️⃣ Updating TAT tracking - Setting tat_end_time...`);
+    try {
+      const [tatUpdateResult] = await sequelize.query(`
+        UPDATE tat_tracking
+        SET tat_end_time = GETDATE(),
+            tat_status = 'resolved',
+            updated_at = GETDATE()
+        WHERE call_id = ?;
+        
+        SELECT 
+          id,
+          call_id,
+          tat_start_time,
+          tat_end_time,
+          DATEDIFF(MINUTE, tat_start_time, tat_end_time) as total_tat_minutes
+        FROM tat_tracking
+        WHERE call_id = ?
+      `, {
+        replacements: [call_id, call_id],
+        transaction
+      });
+
+      if (tatUpdateResult && tatUpdateResult.length > 0) {
+        const tatData = tatUpdateResult[0];
+        console.log(`   ✅ TAT tracking completed:`);
+        console.log(`      Start Time: ${tatData.tat_start_time}`);
+        console.log(`      End Time: ${tatData.tat_end_time}`);
+        console.log(`      Total TAT: ${tatData.total_tat_minutes} minutes`);
+      } else {
+        console.log(`   ⚠️  No TAT tracking found for this call (TAT may not have been started)`);
+      }
+    } catch (tatErr) {
+      console.error(`   ⚠️  Error updating TAT tracking:`, tatErr.message);
+      // Don't fail the operation if TAT update fails
+    }
+
+    // Step 6: Get technician name for closed_by field
+    let closedByName = null;
+    try {
+      const [techData] = await sequelize.query(`
+        SELECT t.name
+        FROM users t
+        WHERE t.user_id = ?
+      `, {
+        replacements: [userId],
+        transaction
+      });
+      if (techData && techData.length > 0) {
+        closedByName = techData[0].name;
+      }
+    } catch (nameErr) {
+      console.warn(`⚠️ Could not fetch user name for user_id ${userId}:`, nameErr.message);
+    }
+
+    // Step 7: Update call status to CLOSED and set closed_by fields
+    console.log(`\n6️⃣ Updating call status to CLOSED...`);
     const statusUpdate = await sequelize.query(`
       UPDATE calls
-      SET status = ?,
+      SET status_id = 8,
+          sub_status_id = NULL,
+          closed_by = ?,
+          closed_by_user_id = ?,
           updated_at = GETDATE()
       WHERE call_id = ?
     `, {
-      replacements: [status, callId],
+      replacements: [closedByName || 'System', userId || null, call_id],
       transaction
     });
 
     if (statusUpdate[1] === 0) {
-      throw new Error(`Call ${callId} not found`);
+      throw new Error(`Call ${call_id} not found`);
     }
 
-    console.log(`   ✅ Call status updated to ${status}`);
-
+    console.log(`   ✅ Call status updated to CLOSED (status_id=8)`);
+    console.log(`   ✅ Closed by: ${closedByName || 'System'} (User ID: ${userId})`);
     // Commit transaction
-    await transaction.commit();
+    await safeCommit(transaction);
     console.log(`\n✅ CALL CLOSED SUCCESSFULLY\n`);
 
     res.json({
       ok: true,
       message: 'Call closed and spare movements processed',
-      callId,
+      call_id,
       data: {
-        call_id: callId,
-        status,
+        call_id: call_id,
+        status_id: 8,
+        status_name: 'CLOSED',
+        closed_by: closedByName || 'System',
+        closed_by_user_id: userId,
         spare_movements: {
           stock_movement_created: !!movementId,
           stock_movement_id: movementId,
@@ -972,11 +1238,16 @@ router.post('/call/:callId/close', async (req, res) => {
           total_qty_processed: totalUsedQty,
           inventory_updates: inventoryUpdated,
         },
+        tat_tracking: {
+          message: 'TAT end time set to current time (call closure time)',
+          tat_end_time: new Date(),
+          tat_status: 'resolved'
+        }
       },
     });
 
   } catch (err) {
-    await transaction.rollback();
+    await safeRollback(transaction, err);
     console.error('❌ Error closing call:', err);
     res.status(500).json({
       ok: false,

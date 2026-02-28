@@ -32,11 +32,11 @@ async function checkModelRelationship() {
         // Try to find the MAPPED_MODEL in model codes
         console.log('\n\nChecking MAPPED_MODEL values...');
         const mappedModels = await sequelize.query(
-          `SELECT DISTINCT MAPPED_MODEL FROM spare_parts WHERE MAPPED_MODEL IS NOT NULL LIMIT 10`,
+          `SELECT DISTINCT TOP 10 MAPPED_MODEL FROM spare_parts WHERE MAPPED_MODEL IS NOT NULL`,
           { type: sequelize.QueryTypes.SELECT }
         );
         
-        console.log('Sample MAPPED_MODEL values:');
+        console.log('Sample MAPPED_MODEL values');
         mappedModels.forEach(m => {
           console.log(`  - ${m.MAPPED_MODEL}`);
         });

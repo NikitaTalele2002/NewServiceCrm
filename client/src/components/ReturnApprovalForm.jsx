@@ -46,7 +46,7 @@ const ReturnApprovalForm = ({
           Back to Requests
         </button>
         <div className="header-content">
-          <h2>Approve Return Request</h2>
+          <h2>Approve & Verify Return Request</h2>
           <p className="request-id">Request #{returnRequest.id}</p>
         </div>
       </div>
@@ -99,6 +99,7 @@ const ReturnApprovalForm = ({
                 <tr>
                   <th>SKU</th>
                   <th>Part Name</th>
+                  <th>Condition</th>
                   <th>Requested Qty</th>
                   <th>Approved Qty</th>
                   <th>Actions</th>
@@ -111,6 +112,11 @@ const ReturnApprovalForm = ({
                     <tr key={idx}>
                       <td className="sku-cell">{item.sku}</td>
                       <td>{item.name}</td>
+                      <td className="condition-cell">
+                        <span className={`condition-badge ${(item.condition || 'good').toLowerCase()}`}>
+                          {item.condition === 'defective' ? '❌ Defective' : '✓ Good'}
+                        </span>
+                      </td>
                       <td className="qty-cell">{item.requestedQty}</td>
                       <td className="approved-qty-cell">
                         <div className="qty-input-group">
@@ -158,7 +164,7 @@ const ReturnApprovalForm = ({
                   ))
                 ) : (
                   <tr>
-                    <td colSpan="6" className="empty-row">
+                    <td colSpan="7" className="empty-row">
                       No items found
                     </td>
                   </tr>
@@ -190,6 +196,28 @@ const ReturnApprovalForm = ({
           />
         </div>
 
+        {/* Process Information */}
+        <div className="approval-section info-section">
+          <h3>⚡ One-Click Approval & Verification</h3>
+          <div className="process-info">
+            <p>When you click the button below, the following will happen automatically:</p>
+            <div className="process-steps">
+              <div className="step">
+                <span className="step-num">1️⃣</span>
+                <span className="step-text"><strong>Approve Return</strong> - Stock movement created for tracking</span>
+              </div>
+              <div className="step">
+                <span className="step-num">2️⃣</span>
+                <span className="step-text"><strong>Verify Return</strong> - Inventory updated (Technician -Qty, ASC +Qty)</span>
+              </div>
+              <div className="step">
+                <span className="step-num">3️⃣</span>
+                <span className="step-text"><strong>Complete Process</strong> - Return status marked as Verified</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
         {/* Action Buttons */}
         <div className="approval-actions">
           <button
@@ -210,7 +238,7 @@ const ReturnApprovalForm = ({
               </>
             ) : (
               <>
-                <span className="btn-icon">✓</span> Approve Return Request ({totalApprovedQty} units)
+                <span className="btn-icon">✓</span> Approve & Verify Return ({totalApprovedQty} units)
               </>
             )}
           </button>
@@ -574,6 +602,47 @@ const ReturnApprovalForm = ({
         @keyframes spin {
           from { transform: rotate(0deg); }
           to { transform: rotate(360deg); }
+        }
+
+        .info-section {
+          background-color: #e8f5e9;
+          border-left: 4px solid #4CAF50;
+        }
+
+        .info-section h3 {
+          color: #2e7d32;
+          margin-top: 0;
+        }
+
+        .process-info p {
+          color: #555;
+          margin: 0 0 16px 0;
+        }
+
+        .process-steps {
+          display: flex;
+          flex-direction: column;
+          gap: 12px;
+        }
+
+        .step {
+          display: flex;
+          align-items: center;
+          gap: 12px;
+          padding: 8px;
+          background-color: white;
+          border-radius: 4px;
+          border: 1px solid #c8e6c9;
+        }
+
+        .step-num {
+          font-size: 20px;
+          min-width: 30px;
+        }
+
+        .step-text {
+          color: #333;
+          font-size: 14px;
         }
       `}</style>
     </div>

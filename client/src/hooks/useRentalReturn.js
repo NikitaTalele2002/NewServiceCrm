@@ -225,7 +225,7 @@ export const useRentalReturn = () => {
     }
   };
 
-  // Handle return approval (NEW)
+  // Handle return approval (NEW) - NOW DOES BOTH APPROVE AND VERIFY
   const handleApproveReturn = async (approvedQtysData) => {
     if (!selectedReturn) {
       setError('No return selected');
@@ -235,20 +235,40 @@ export const useRentalReturn = () => {
     setApprovalLoading(true);
     try {
       setError(null);
-      console.log(`✅ Approving return request ${selectedReturn.id}...`);
+      console.log(`✅ Starting approval + verification for return ${selectedReturn.id}...`);
       console.log('Approved quantities:', approvedQtysData);
       
-      const result = await rentalReturnService.approveReturnRequest(
+      // STEP 1: Approve the return (creates stock movement)
+      const approveResult = await rentalReturnService.approveReturnRequest(
         selectedReturn.id,
         token,
         approvalRemarks,
         approvedQtysData
       );
       
-      console.log('✅ Return approved:', result);
-      alert(`✅ Return request approved successfully!\nItems: ${result.itemsProcessed}\nTotal Qty: ${result.totalQtyApproved}`);
+      console.log('✅ Return approved:', approveResult);
+
+      // Prepare items for STEP 2: Verify
+      const itemsToVerify = (selectedReturn.items || []).map((item, idx) => ({
+        spare_id: item.spareId || item.spare_id,
+        verified_qty: approvedQtysData[idx] || item.approvedQty || item.requestedQty
+      }));
       
-      // Refresh pending returns list
+      console.log('📦 Items for verification:', itemsToVerify);
+      
+      // STEP 2: Verify the return (updates inventory)
+      const verifyResult = await rentalReturnService.verifyReturnRequest(
+        selectedReturn.id,
+        token,
+        itemsToVerify,
+        approvalRemarks
+      );
+      
+      console.log('✅ Return verified:', verifyResult);
+      
+      alert(`✅ Return request APPROVED & VERIFIED successfully!\n\n🎯 Completed Actions:\n✓ Stock movement created\n✓ Inventory updated\n✓ Return status: Verified\n\nTotal Items: ${verifyResult.totalQuantityReturned || approveResult.totalQtyApproved}`);
+      
+      // Refresh pending returns and go back to list
       await fetchPendingReturns();
       
       // Reset approval state and go back to list
@@ -257,8 +277,8 @@ export const useRentalReturn = () => {
       setApprovedQtys({});
       setView('list');
     } catch (error) {
-      console.error('Error approving return:', error);
-      setError(error.message || 'Failed to approve return');
+      console.error('Error approving/verifying return:', error);
+      setError(error.message || 'Failed to approve and verify return');
     } finally {
       setApprovalLoading(false);
     }

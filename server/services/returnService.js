@@ -1,5 +1,6 @@
 import { sequelize, SparePart, ProductModel, ProductMaster, ProductGroup, SpareRequest, SpareRequestItem } from '../models/index.js';
 import { Op } from 'sequelize';
+import { safeRollback, safeCommit, isTransactionActive } from '../utils/transactionHelper.js';
 
 // Get distinct product groups in service center inventory
 export async function getInventoryGroups(scId) {
@@ -181,10 +182,10 @@ export async function submitReturnRequest(returnType, items, userId, centerId) {
       await inventory.save({ transaction });
     }
 
-    await transaction.commit();
+    await safeCommit(transaction);
     return { id: spareRequest.Id };
   } catch (error) {
-    await transaction.rollback();
+    await safeRollback(transaction, error);
     console.error('Error submitting return request:', error);
     throw error;
   }
@@ -315,9 +316,9 @@ export async function updateReturnRequestItems(id, branchId, items) {
       }
     }
 
-    await transaction.commit();
+    await safeCommit(transaction);
   } catch (error) {
-    await transaction.rollback();
+    await safeRollback(transaction, error);
     console.error('Error updating items:', error);
     throw error;
   }

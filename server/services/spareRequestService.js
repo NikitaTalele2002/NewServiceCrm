@@ -1,4 +1,5 @@
 import { sequelize, SpareRequest, SpareRequestItem, ServiceCenterInventory, Technician, ComplaintRegistration, ServiceCentre, BranchInventory, TechnicianInventory, SparePart, Product, Calls, Status, SubStatus } from '../models/index.js';
+import { safeRollback, safeCommit, isTransactionActive } from '../utils/transactionHelper.js';
 
 // List spare requests with filters
 export async function listSpareRequests(userServiceCenterId, complaintId, type) {
@@ -175,10 +176,10 @@ export async function createSpareRequest(complaintId, technicianId, items, notes
       }
     }
 
-    await transaction.commit();
+    await safeCommit(transaction);
     return { id: request.Id, requestNumber: request.RequestNumber };
   } catch (error) {
-    await transaction.rollback();
+    await safeRollback(transaction, error);
     console.error('Error creating spare request:', error);
     throw error;
   }
@@ -446,9 +447,9 @@ export async function allocateSpares(requestId, allocations, userServiceCenterId
       Status: 'Allocated'
     }, { transaction });
 
-    await transaction.commit();
+    await safeCommit(transaction);
   } catch (error) {
-    await transaction.rollback();
+    await safeRollback(transaction, error);
     console.error('Error allocating spares:', error);
     throw error;
   }
@@ -511,9 +512,9 @@ export async function orderFromBranch(requestId, cartItems) {
       }
     }
 
-    await transaction.commit();
+    await safeCommit(transaction);
   } catch (error) {
-    await transaction.rollback();
+    await safeRollback(transaction, error);
     console.error('Error ordering from branch:', error);
     throw error;
   }
@@ -574,9 +575,9 @@ export async function returnParts(requestId, returns) {
       }
     }
 
-    await transaction.commit();
+    await safeCommit(transaction);
   } catch (error) {
-    await transaction.rollback();
+    await safeRollback(transaction, error);
     console.error('Error returning parts:', error);
     throw error;
   }
@@ -617,14 +618,16 @@ export async function getTechnicianInventory(technicianId) {
   try {
     const inventory = await TechnicianInventory.findAll({
       where: { TechnicianId: technicianId },
-      attributes: ['Id', 'Sku', 'SpareName', 'GoodQty', 'DefectiveQty']
+      attributes: ['Id', 'Sku', 'SpareName', 'GoodQty', 'DefectiveQty', 'createdAt', 'updatedAt']
     });
     return inventory.map(i => ({
       id: i.Id,
-      sku: i.Sku,
-      spareName: i.SpareName,
-      goodQty: i.GoodQty,
-      defectiveQty: i.DefectiveQty
+      PART: i.Sku || '-',
+      DESCRIPTION: i.SpareName || '-',
+      qty_good: i.GoodQty || 0,
+      qty_defective: i.DefectiveQty || 0,
+      created_at: i.createdAt,
+      updated_at: i.updatedAt
     }));
   } catch (error) {
     console.error('Error fetching technician inventory:', error);
@@ -673,10 +676,10 @@ export async function createReplacementRequest(callId, productGroup, product, mo
       UpdatedAt: new Date()
     }, { transaction });
 
-    await transaction.commit();
+    await safeCommit(transaction);
     return { id: spareRequest.Id, requestNumber: spareRequest.RequestNumber };
   } catch (error) {
-    await transaction.rollback();
+    await safeRollback(transaction, error);
     console.error('Error creating replacement request:', error);
     throw error;
   }
@@ -818,9 +821,9 @@ export async function bulkReturnParts(returns) {
       }
     }
 
-    await transaction.commit();
+    await safeCommit(transaction);
   } catch (error) {
-    await transaction.rollback();
+    await safeRollback(transaction, error);
     console.error('Error returning parts:', error);
     throw error;
   }

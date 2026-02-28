@@ -20,6 +20,7 @@ export default function SpareReturnRequest() {
     spares,
     inventory,
     cart,
+    cartInvoices,
     selectedItems,
     loading,
     error,
@@ -70,7 +71,10 @@ export default function SpareReturnRequest() {
 
       <SparePartReturnCart
         cart={cart}
-        removeFromCart={removeFromCart}/>
+        cartInvoices={cartInvoices}
+        onRemoveItem={removeFromCart}
+        onSubmitCart={submitRequest}
+        loading={loading}/>
 
       {/* Buttons */}
       <div className="flex gap-4 mb-6">

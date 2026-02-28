@@ -26,7 +26,8 @@ async function checkLogisticsItems() {
       FROM logistics_document_items ldi
       JOIN logistics_documents ld ON ldi.document_id = ld.id
       LEFT JOIN spare_parts sp ON ldi.spare_part_id = sp.Id
-      ORDER BY ldi.id DESC LIMIT 15
+      ORDER BY ldi.id DESC 
+      OFFSET 0 ROWS FETCH NEXT 15 ROWS ONLY
     `);
 
     if (items[0].length === 0) {

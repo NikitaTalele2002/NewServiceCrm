@@ -50,6 +50,16 @@ export const sparePartReturnService = {
     return response.json();
   },
 
+  // Get FIFO invoice information for spares in cart
+  getFIFOInvoices: async (spareIds, token) => {
+    const spareIdString = spareIds.join(',');
+    const response = await fetch(`${API_BASE}/fifo-invoices?spareIds=${spareIdString}`, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    if (!response.ok) throw new Error('Failed to fetch FIFO invoices');
+    return response.json();
+  },
+
   // Submit return request
   submitReturnRequest: async (returnType, items, token) => {
     const response = await fetch(`${API_BASE}`, {

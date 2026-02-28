@@ -1,7 +1,7 @@
 import express from "express";
 const router = express.Router();
 import { Op, QueryTypes } from 'sequelize';
-import { sequelize, SparePart, ServiceCenterInventory, ProductModel, ProductMaster, ProductGroup, ServiceCentre, SpareRequest, SpareRequestItem } from '../models/index.js';
+import { sequelize, SparePart, ServiceCenterInventory, ProductModel, ProductMaster, ProductGroup, ServiceCentre, SpareRequest, SpareRequestItem, SAPDocuments, SAPDocumentItems } from '../models/index.js';
 import { authenticateToken, optionalAuthenticate } from '../middleware/auth.js';
 
 // GET /api/returns/service-centers/:id/inventory/groups - Get distinct product groups in service center inventory
@@ -131,7 +131,7 @@ router.get('/service-centers/:id/inventory', optionalAuthenticate, async (req, r
   }
 });
 
-// POST /api/returns - Submit spare return request
+// POST /api/returns - Submit spare return request with FIFO invoice matching
 router.post('/', authenticateToken, async (req, res) => {
   const transaction = await sequelize.transaction();
   try {
@@ -151,6 +151,7 @@ router.post('/', authenticateToken, async (req, res) => {
       return res.status(400).json({ error: 'Service center not found or not assigned to a branch' });
     }
     const branchId = serviceCentre.BranchId;
+    const asc_id = centerId; // ASC ID is the service center ID
 
     // Create the spare request
     const spareRequest = await SpareRequest.create({
@@ -163,6 +164,17 @@ router.post('/', authenticateToken, async (req, res) => {
       UpdatedAt: new Date()
     }, { transaction });
 
+    // Generate return document number
+    const returnDate = new Date();
+    const returnDateStr = `${returnDate.getFullYear()}${String(returnDate.getMonth() + 1).padStart(2, '0')}${String(returnDate.getDate()).padStart(2, '0')}`;
+    const returnRandom = Math.random().toString(36).substring(2, 8).toUpperCase();
+    const returnDocNumber = `RET-${returnDateStr}-${returnRandom}`;
+
+    console.log(`[RETURN] Processing return request: ${returnDocNumber}`);
+    console.log(`[RETURN] Service Center: ${centerId}, Branch: ${branchId}`);
+    console.log(`[RETURN] Return Type: ${returnType}`);
+
+    // Process each returned item
     for (const item of items) {
       // Validate quantities based on return type
       const inventory = await ServiceCenterInventory.findOne({
@@ -186,16 +198,76 @@ router.post('/', authenticateToken, async (req, res) => {
         return res.status(400).json({ error: `Invalid return quantity for ${item.spareName}. Available: ${availableQty}` });
       }
 
-      // Create spare request item
-      await SpareRequestItem.create({
+      // ===== FIFO INVOICE MATCHING =====
+      console.log(`[FIFO] Finding invoice for spare: ${item.sku}, qty: ${item.returnQty}`);
+      
+      // Get spare part details (unit_price, hsn)
+      const sparePart = await SparePart.findOne({
+        where: { PART: item.sku },
+        raw: true,
+        transaction
+      });
+
+      // Find the EARLIEST (FIFO) SAP invoice for this spare that was sent to this ASC
+      // We look for the oldest SAPDocumentItems entry for this spare at this ASC
+      const fifInvoice = await sequelize.query(`
+        SELECT TOP 1 
+          sd.id as sap_doc_id,
+          sd.sap_doc_number,
+          sd.created_at,
+          sdi.id as sap_item_id,
+          sdi.spare_part_id,
+          sdi.qty as invoice_qty,
+          sdi.unit_price,
+          sdi.gst,
+          sdi.hsn
+        FROM sap_documents sd
+        INNER JOIN sap_document_items sdi ON sd.id = sdi.sap_doc_id
+        WHERE sd.asc_id = ?
+          AND sd.sap_doc_type = 'INVOICE'
+          AND sdi.spare_part_id = ?
+        ORDER BY sd.created_at ASC
+      `, {
+        replacements: [asc_id, sparePart?.Id || item.sku],
+        type: QueryTypes.SELECT,
+        transaction
+      });
+
+      let invoiceData = null;
+      if (fifInvoice && fifInvoice.length > 0) {
+        invoiceData = fifInvoice[0];
+        console.log(`✅ FIFO Invoice found: ${invoiceData.sap_doc_number}`);
+        console.log(`   Created: ${invoiceData.created_at}`);
+        console.log(`   Unit Price: ${invoiceData.unit_price}, HSN: ${invoiceData.hsn}, GST: ${invoiceData.gst}`);
+      } else {
+        console.warn(`⚠️  No invoice found for spare ${item.sku} at ASC ${asc_id}`);
+        // Use spare part master data as fallback
+        invoiceData = {
+          sap_doc_number: 'MANUAL_RETURN',
+          unit_price: sparePart?.unit_price || 0,
+          hsn: sparePart?.hsn_code || null,
+          gst: sparePart?.gst_rate || 0
+        };
+      }
+
+      // Create spare request item with invoice details
+      const srItem = await SpareRequestItem.create({
         RequestId: spareRequest.Id,
         Sku: item.sku,
         SpareName: item.spareName || item.sku || 'Unknown Spare',
         RequestedQty: item.returnQty,
-        // ReceivedQty: item.returnQty, // Commented out until migration is run
+        // Invoice details for return reference
+        invoice_number: invoiceData.sap_doc_number,
+        invoice_unit_price: invoiceData.unit_price,
+        invoice_hsn: invoiceData.hsn,
+        invoice_gst: invoiceData.gst,
+        return_document_number: returnDocNumber,
+        return_type: returnType || 'Return',
         CreatedAt: new Date(),
         UpdatedAt: new Date()
       }, { transaction });
+
+      console.log(`✅ Return item created: ${item.sku}, Qty: ${item.returnQty}, Invoice: ${invoiceData.sap_doc_number}`);
 
       // Deduct from service center inventory based on return type
       if (returnType && returnType.toLowerCase() === 'defective') {
@@ -207,10 +279,17 @@ router.post('/', authenticateToken, async (req, res) => {
     }
 
     await transaction.commit();
-    res.json({ success: true, message: 'Return request submitted successfully', requestId: spareRequest.Id });
+    console.log(`✅ Return request submitted: ${returnDocNumber}`);
+    
+    res.json({ 
+      success: true, 
+      message: 'Return request submitted successfully', 
+      requestId: spareRequest.Id,
+      returnDocNumber: returnDocNumber
+    });
   } catch (error) {
     await transaction.rollback();
-    console.error('Error submitting return request:', error);
+    console.error('❌ Error submitting return request:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -610,7 +689,7 @@ router.get('/service-center-requests/:id/details', authenticateToken, async (req
  */
 router.get('/technician-spare-returns/list', optionalAuthenticate, async (req, res) => {
   try {
-    const { serviceCenterId, status = 'submitted' } = req.query;
+    const { serviceCenterId, status = 'Approved' } = req.query;
 
     if (!serviceCenterId) {
       return res.status(400).json({ error: 'Service Center ID is required' });
@@ -618,35 +697,37 @@ router.get('/technician-spare-returns/list', optionalAuthenticate, async (req, r
 
     console.log(`📋 Fetching technician spare returns for SC ${serviceCenterId} (status: ${status})`);
 
-    // Fetch technician spare return requests for this service center
+    // Fetch technician spare return requests for this service center from spare_requests table
     const spareReturns = await sequelize.query(`
       SELECT 
-        tsr.return_id,
-        tsr.return_number,
-        tsr.call_id,
-        tsr.technician_id,
-        tsr.service_center_id,
-        tsr.return_status,
-        tsr.return_date,
-        tsr.received_date,
-        tsr.verified_date,
-        tsr.remarks,
-        tsr.created_at,
+        sr.request_id as return_id,
+        sr.request_number as return_number,
+        sr.call_id,
+        sr.requested_source_id as technician_id,
+        sr.requested_to_id as service_center_id,
+        s.status_name as return_status,
+        sr.created_at as return_date,
+        sr.updated_at as received_date,
+        sr.verified_at as verified_date,
+        sr.remarks,
+        sr.created_at,
         t.name as technician_name,
-        t.mobile_no as technician_phone,
-        (SELECT COUNT(*) FROM technician_spare_return_items 
-         WHERE return_id = tsr.return_id AND item_type = 'defective') as defective_count,
-        (SELECT COUNT(*) FROM technician_spare_return_items 
-         WHERE return_id = tsr.return_id AND item_type = 'unused') as unused_count,
-        (SELECT SUM(requested_qty) FROM technician_spare_return_items 
-         WHERE return_id = tsr.return_id AND item_type = 'defective') as defective_qty,
-        (SELECT SUM(requested_qty) FROM technician_spare_return_items 
-         WHERE return_id = tsr.return_id AND item_type = 'unused') as unused_qty
-      FROM technician_spare_returns tsr
-      LEFT JOIN technicians t ON tsr.technician_id = t.technician_id
-      WHERE tsr.service_center_id = ?
-        AND tsr.return_status = ?
-      ORDER BY tsr.created_at DESC
+        t.MOBILE_NO as technician_phone,
+        (SELECT COUNT(*) FROM spare_request_items 
+         WHERE request_id = sr.request_id) as defective_count,
+        (SELECT COUNT(*) FROM spare_request_items 
+         WHERE request_id = sr.request_id) as unused_count,
+        (SELECT SUM(qty_requested) FROM spare_request_items 
+         WHERE request_id = sr.request_id) as defective_qty,
+        (SELECT SUM(qty_good) FROM spare_request_items 
+         WHERE request_id = sr.request_id) as unused_qty
+      FROM spare_requests sr
+      LEFT JOIN technicians t ON sr.requested_source_id = t.technician_id AND sr.requested_source_type = 'technician'
+      LEFT JOIN status s ON sr.status_id = s.status_id
+      WHERE sr.requested_to_id = ?
+        AND sr.requested_to_type = 'service_center'
+        AND s.status_name = ?
+      ORDER BY sr.created_at DESC
     `, { 
       replacements: [serviceCenterId, status],
       type: QueryTypes.SELECT 
@@ -682,23 +763,23 @@ router.get('/technician-spare-returns/:returnId/items', optionalAuthenticate, as
 
     const items = await sequelize.query(`
       SELECT 
-        tsri.return_item_id,
-        tsri.return_id,
-        tsri.spare_id,
-        tsri.item_type,
-        tsri.requested_qty,
-        tsri.received_qty,
-        tsri.verified_qty,
-        tsri.defect_reason,
-        tsri.condition_on_receipt,
-        tsri.remarks,
+        sri.request_item_id as return_item_id,
+        sri.request_id as return_id,
+        sri.spare_id,
+        'good' as item_type,
+        sri.qty_requested as requested_qty,
+        sri.qty_received as received_qty,
+        sri.qty_good as verified_qty,
+        '' as defect_reason,
+        '' as condition_on_receipt,
+        sri.remarks,
         sp.PART as spare_code,
         sp.DESCRIPTION as spare_name,
         sp.BRAND as spare_brand
-      FROM technician_spare_return_items tsri
-      LEFT JOIN spare_parts sp ON tsri.spare_id = sp.Id
-      WHERE tsri.return_id = ?
-      ORDER BY tsri.item_type DESC, tsri.return_item_id
+      FROM spare_request_items sri
+      LEFT JOIN spare_parts sp ON sri.spare_id = sp.Id
+      WHERE sri.request_id = ?
+      ORDER BY sri.request_item_id
     `, { 
       replacements: [returnId],
       type: QueryTypes.SELECT 

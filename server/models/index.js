@@ -55,14 +55,12 @@ import SAPDocumentItemsFactory from "./SAPDocumentItems.js";
 import ServiceCenterFinancialFactory from "./ServiceCenterFinancial.js";
 import ServiceCenterPincodesFactory from "./ServiceCenterPincodes.js";
 import ProductMasterFactory from "./ProductMaster.js";
-import TechnicianSpareReturnFactory from "./TechnicianSpareReturn.js";
-import TechnicianSpareReturnItemFactory from "./TechnicianSpareReturnItem.js";
 import { sequelize } from "../db.js";
 import dotenv from "dotenv";
 
 dotenv.config();
 
-let Customer, Product, ProductMaster, Users, State, City, CityTierMaster, Pincode, ProductGroup, ProductModel, SparePart, SparePartMSL, SpareRequest, SpareRequestItem, Roles, AccessControl, Dealers, ReportingAuthority, Zones, Plant, RSM, CustomersProducts, Status, SubStatus, Calls, CallSpareUsage, Attachments, AttachmentAccess, HappyCodes, TATTracking, TATHolds, ActionLog, Approvals, SpareInventory, StockMovement, Cartons, GoodsMovementItems, ServiceCenter, Technicians, CallTechnicianAssignment, CallCancellationRequests, LogisticsDocuments, LogisticsDocumentItems, ServiceInvoice, ServiceInvoiceItem, DefectMaster, DefectSpares, ModelDefects, EntityChangeRequests, Ledger, Replacements, Reimbursement, RSMStateMapping, SAPDocuments, SAPDocumentItems, ServiceCenterFinancial, ServiceCenterPincodes, TechnicianSpareReturn, TechnicianSpareReturnItem;
+let Customer, Product, ProductMaster, Users, State, City, CityTierMaster, Pincode, ProductGroup, ProductModel, SparePart, SparePartMSL, SpareRequest, SpareRequestItem, Roles, AccessControl, Dealers, ReportingAuthority, Zones, Plant, RSM, CustomersProducts, Status, SubStatus, Calls, CallSpareUsage, Attachments, AttachmentAccess, HappyCodes, TATTracking, TATHolds, ActionLog, Approvals, SpareInventory, StockMovement, Cartons, GoodsMovementItems, ServiceCenter, Technicians, CallTechnicianAssignment, CallCancellationRequests, LogisticsDocuments, LogisticsDocumentItems, ServiceInvoice, ServiceInvoiceItem, DefectMaster, DefectSpares, ModelDefects, EntityChangeRequests, Ledger, Replacements, Reimbursement, RSMStateMapping, SAPDocuments, SAPDocumentItems, ServiceCenterFinancial, ServiceCenterPincodes;
 
 try {
   console.log("Loading Customer model...");
@@ -529,22 +527,6 @@ try {
   console.error("Failed to load ServiceCenterPincodes model:", err.message);
 }
 
-try {
-  console.log("Loading TechnicianSpareReturn model...");
-  TechnicianSpareReturn = TechnicianSpareReturnFactory(sequelize, DataTypes);
-  console.log("TechnicianSpareReturn model loaded");
-} catch (err) {
-  console.error("Failed to load TechnicianSpareReturn model:", err.message);
-}
-
-try {
-  console.log("Loading TechnicianSpareReturnItem model...");
-  TechnicianSpareReturnItem = TechnicianSpareReturnItemFactory(sequelize, DataTypes);
-  console.log("TechnicianSpareReturnItem model loaded");
-} catch (err) {
-  console.error("Failed to load TechnicianSpareReturnItem model:", err.message);
-}
-
 // --- REGISTER ALL MODELS IN sequelize.models ---
 console.log("📝 Registering models in sequelize.models...");
 const modelsToRegister = {
@@ -603,9 +585,7 @@ const modelsToRegister = {
   SAPDocuments,
   SAPDocumentItems,
   ServiceCenterFinancial,
-  ServiceCenterPincodes,
-  TechnicianSpareReturn,
-  TechnicianSpareReturnItem
+  ServiceCenterPincodes
 };
 
 let registeredCount = 0;
@@ -1127,23 +1107,6 @@ try {
     });
   }
 
-  // TechnicianSpareReturn - TechnicianSpareReturnItem Association
-  if (TechnicianSpareReturn && TechnicianSpareReturnItem) {
-    // TechnicianSpareReturnItem belongs to TechnicianSpareReturn
-    TechnicianSpareReturnItem.belongsTo(TechnicianSpareReturn, {
-      foreignKey: 'return_id',
-      targetKey: 'return_id',
-      as: 'return',
-    });
-
-    // TechnicianSpareReturn has many TechnicianSpareReturnItems
-    TechnicianSpareReturn.hasMany(TechnicianSpareReturnItem, {
-      foreignKey: 'return_id',
-      sourceKey: 'return_id',
-      as: 'items',
-    });
-  }
-
   // TechnicianSpareReturnItem - SparePart Association
   if (TechnicianSpareReturnItem && SparePart) {
     // TechnicianSpareReturnItem belongs to SparePart
@@ -1269,8 +1232,6 @@ export {
   SAPDocumentItems,
   ServiceCenterFinancial,
   ServiceCenterPincodes,
-  TechnicianSpareReturn,
-  TechnicianSpareReturnItem,
   // OrderRequest,
 };
 

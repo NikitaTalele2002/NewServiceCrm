@@ -562,3 +562,29 @@
     font-size: 12px;
   }
 }
+
+/* Condition Badge Styles */
+.condition-cell {
+  text-align: center;
+}
+
+.condition-badge {
+  display: inline-block;
+  padding: 6px 12px;
+  border-radius: 20px;
+  font-size: 14px;
+  font-weight: 500;
+  transition: all 0.2s ease;
+}
+
+.condition-badge.good {
+  background-color: #d1fae5;
+  color: #065f46;
+  border: 1px solid #a7f3d0;
+}
+
+.condition-badge.defective {
+  background-color: #fee2e2;
+  color: #991b1b;
+  border: 1px solid #fecaca;
+}

@@ -35,11 +35,15 @@ export const createBranchRequestApi = async (requestData) => {
 
 export const getTechnicianInventoryApi = async (technicianId) => {
   const token = localStorage.getItem('token');
+  console.log('🔌 Calling technician inventory API:', getApiUrl(`/technicians/${technicianId}/inventory`));
   const response = await fetch(getApiUrl(`/technicians/${technicianId}/inventory`), {
     headers: { Authorization: `Bearer ${token}` }
   });
   if (!response.ok) throw new Error('Failed to fetch technician inventory');
-  return await response.json();
+  const result = await response.json();
+  console.log('✅ Technician inventory API response:', result);
+  // Handle both { success: true, data: [...] } and direct array formats
+  return result.data || result;
 };
 
 export const getTechniciansByCentreApi = async (centerId) => {

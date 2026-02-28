@@ -124,6 +124,38 @@ export const rentalReturnService = {
     }
   },
 
+  // Verify a return request (after approval)
+  verifyReturnRequest: async (requestId, token, items = [], remarks = '') => {
+    try {
+      console.log(`✓ Verifying return request ${requestId}`, { items, remarks });
+      const response = await fetch(`${API_BASE}/${requestId}/verify`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ 
+          items,
+          verifiedRemarks: remarks
+        })
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        console.error('API Error response:', errorData);
+        throw new Error(errorData.error || errorData.message || `HTTP ${response.status}: Failed to verify return request`);
+      }
+      
+      const data = await response.json();
+      console.log('✅ Return request verified:', data);
+      
+      return data;
+    } catch (error) {
+      console.error('Error verifying return request:', error);
+      throw error;
+    }
+  },
+
   // Get technician inventory for a specific technician
   getTechnicianInventory: async (technicianId, token) => {
     console.log(`🔍 Fetching inventory from /api/spare-requests/technicians/${technicianId}/inventory`);
@@ -148,22 +180,48 @@ export const rentalReturnService = {
     return data;
   },
 
-  // Submit rental returns (now creates PENDING request instead of auto-approving)
+  // Submit rental returns (creates PENDING request in new technician spare returns workflow)
   submitReturns: async (returns, token, technicianId) => {
-    console.log('📤 POST /api/spare-requests/return with data:', {
-      returns,
+    // Convert goodQty/defectiveQty into separate items with conditions
+    const items = [];
+    
+    for (const returnItem of returns) {
+      const { spareId, goodQty, defectiveQty } = returnItem;
+      
+      // Create separate items for good condition
+      if (goodQty > 0) {
+        items.push({
+          spareId: spareId,
+          requestedQty: parseInt(goodQty),
+          condition: 'good'
+        });
+      }
+      
+      // Create separate items for defective condition
+      if (defectiveQty > 0) {
+        items.push({
+          spareId: spareId,
+          requestedQty: parseInt(defectiveQty),
+          condition: 'defective'
+        });
+      }
+    }
+    
+    console.log('📤 POST /api/technician-spare-returns/create with data:', {
+      items,
       technicianId
     });
     
-    const response = await fetch(`${API_BASE}/return`, {
+    const response = await fetch(`/api/technician-spare-returns/create`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${token}`
       },
       body: JSON.stringify({ 
-        returns,
-        technicianId  // Pass technician ID for routing to correct ASC
+        items,
+        remarks: 'Spare return from technician',
+        requestType: 'TECH_RETURN_DEFECTIVE'
       })
     });
     

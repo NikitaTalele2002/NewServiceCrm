@@ -19,7 +19,6 @@ import callCenterRoute from "./routes/callCenter.js";
 import uploadRoutes from "./routes/uploadRoutes.js";
 import branchInventoryCurrentRouter from "./routes/branch_inventory_current.js";
 import logisticsRoute from "./routes/logistics.js";
-import technicianSpareRequestsRoute from "./routes/technician-spare-requests.js";
 import technicianScSpareRequestsRoute from "./routes/technician-sc-spare-requests.js";
 import technicianSpareReturnsRoute from "./routes/technician-spare-returns.js";
 import spareReturnRequestsRoute from "./routes/spare-return-requests.js";
@@ -68,8 +67,6 @@ app.use("/api/branch", branchInventoryCurrentRouter);
 // app.use("/api/branch", branchRoute);
 // Spare requests
 app.use("/api/spare-requests", spareRequestsRoute);
-// Technician spare requests (new workflow)
-app.use("/api/technician-spare-requests", technicianSpareRequestsRoute);
 // Technician to Service Center spare requests (Rental Allocation workflow)
 app.use("/api/technician-sc-spare-requests", technicianScSpareRequestsRoute);
 // Technician spare returns (defective & unused spares after call completion)
@@ -108,6 +105,24 @@ app.use("/api/logistics", logisticsRoute);
 
 // Attachments
 app.use("/api/attachments", attachmentRoutes);
+
+// GLOBAL ERROR HANDLER MIDDLEWARE
+// Must be defined AFTER all routes
+app.use((err, req, res, next) => {
+  console.error('❌ Global error handler caught:', {
+    message: err.message,
+    stack: err.stack,
+    url: req.url,
+    method: req.method
+  });
+  
+  // Always return JSON, never HTML
+  res.status(err.status || 500).json({
+    ok: false,
+    error: err.message || 'Internal server error',
+    details: process.env.NODE_ENV === 'development' ? err.stack : undefined
+  });
+});
 
 // SERVER
 const PORT = process.env.PORT || 5000;

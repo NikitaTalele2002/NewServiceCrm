@@ -58,11 +58,10 @@ async function getTechnicianDetails() {
 
   try {
     const response = await sequelize.query(`
-      SELECT t.technician_id, t.service_center_id 
+      SELECT TOP 1 t.technician_id, t.service_center_id 
       FROM technicians t
       LEFT JOIN users u ON t.user_id = u.user_id
       WHERE u.username = 'technician1'
-      LIMIT 1
     `);
 
     if (response && response.length > 0 && response[0].length > 0) {
@@ -100,7 +99,7 @@ async function createTestCall() {
         created_at
       ) VALUES (
         (SELECT TOP 1 customer_id FROM customers),
-        (SELECT TOP 1 customers_products_id FROM customers_products LIMIT 1),
+        (SELECT TOP 1 customers_products_id FROM customers_products),
         ?,
         (SELECT TOP 1 status_id FROM [status] WHERE status_name = 'open'),
         'Test call for spare return',

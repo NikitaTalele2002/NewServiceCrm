@@ -1,11 +1,89 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { DataTable, Button } from '../common';
 
-const SpareReturnCart = ({ cart, onRemoveItem, onSubmitCart, loading }) => {
+const SpareReturnCart = ({ cart, onRemoveItem, onSubmitCart, loading, cartInvoices = {} }) => {
+  const [debugInfo, setDebugInfo] = useState('');
+
+  useEffect(() => {
+    if (cart.length > 0) {
+      // Debug: Log cart item structure and invoice data
+      console.log('📋 Cart items:', cart);
+      console.log('📋 Cart invoices:', cartInvoices);
+      
+      if (cart[0]) {
+        console.log('📋 First cart item keys:', Object.keys(cart[0]));
+        console.log('📋 First cart item:', JSON.stringify(cart[0], null, 2));
+      }
+    }
+  }, [cart, cartInvoices]);
+
+  const getSpareId = (item) => {
+    // Try multiple possible field names
+    return item.spare_id || item.spareId || item.Id || item.id || item.PART;
+  };
+
   const columns = [
-    { key: 'spareName', header: 'Spare Part' },
-    { key: 'quantity', header: 'Quantity' },
+    { key: 'DESCRIPTION', header: 'Spare Part' },
+    { key: 'returnQty', header: 'Return QTY' },
     { key: 'reason', header: 'Reason' },
+    {
+      key: 'invoice',
+      header: 'Invoice Number & Details',
+      render: (item) => {
+        // Try to find invoice data for this spare using multiple strategies
+        const spareId = getSpareId(item);
+        
+        let invoiceData = null;
+        
+        // Try direct lookup first
+        if (cartInvoices?.[spareId]) {
+          invoiceData = cartInvoices[spareId];
+        } else if (item.fifo_invoice) {
+          // Try if invoice data is stored on the item itself
+          invoiceData = typeof item.fifo_invoice === 'string' 
+            ? JSON.parse(item.fifo_invoice) 
+            : item.fifo_invoice;
+        }
+        
+        if (invoiceData && invoiceData.sap_doc_number) {
+          return (
+            <div className="flex flex-col gap-2 py-2">
+              <div className="bg-blue-50 border border-blue-200 rounded p-2">
+                <div className="font-bold text-blue-700 text-sm">
+                  📄 {invoiceData.sap_doc_number}
+                </div>
+                {invoiceData.unit_price && (
+                  <div className="text-xs text-gray-700">
+                    Rate: <span className="font-semibold">₹{invoiceData.unit_price.toFixed(2)}</span>
+                  </div>
+                )}
+                {invoiceData.hsn && (
+                  <div className="text-xs text-gray-700">
+                    HSN: <span className="font-semibold">{invoiceData.hsn}</span>
+                  </div>
+                )}
+                {invoiceData.gst !== undefined && (
+                  <div className="text-xs text-gray-700">
+                    GST: <span className="font-semibold">{invoiceData.gst}%</span>
+                  </div>
+                )}
+                {invoiceData.invoice_date && (
+                  <div className="text-xs text-gray-500">
+                    Date: {new Date(invoiceData.invoice_date).toLocaleDateString()}
+                  </div>
+                )}
+              </div>
+            </div>
+          );
+        }
+        
+        return (
+          <div className="text-gray-400 text-sm italic">
+            ⏳ Fetching invoice...
+          </div>
+        );
+      }
+    },
     {
       key: 'actions',
       header: 'Actions',
@@ -20,7 +98,7 @@ const SpareReturnCart = ({ cart, onRemoveItem, onSubmitCart, loading }) => {
     }
   ];
 
-  const totalItems = cart.reduce((sum, item) => sum + parseInt(item.quantity || 0), 0);
+  const totalItems = cart.reduce((sum, item) => sum + parseInt(item.returnQty || item.quantity || 0), 0);
 
   return (
     <div className="bg-white shadow rounded-lg p-6">
@@ -52,3 +130,5 @@ const SpareReturnCart = ({ cart, onRemoveItem, onSubmitCart, loading }) => {
 };
 
 export default SpareReturnCart;
+
+

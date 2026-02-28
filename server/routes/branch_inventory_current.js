@@ -23,7 +23,7 @@ router.get('/assigned-plants', authenticateToken, async (req, res) => {
     let rsmId = req.user.rsmId;
     if (!rsmId) {
       const rsmRecord = await sequelize.query(
-        `SELECT rsm_id FROM rsms WHERE user_id = ? LIMIT 1`,
+        `SELECT TOP 1 rsm_id FROM rsms WHERE user_id = ?`,
         { replacements: [rsmUserId], type: sequelize.QueryTypes.SELECT }
       );
       rsmId = rsmRecord[0]?.rsm_id;

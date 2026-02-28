@@ -13,6 +13,8 @@ export default function SpareReturnRequest() {
   const [spares, setSpares] = useState([]);
   const [inventory, setInventory] = useState([]);
   const [cart, setCart] = useState([]);
+  const [cartInvoices, setCartInvoices] = useState({});  // NEW: Store invoice data
+  const [showCartModal, setShowCartModal] = useState(false);  // NEW: Modal visibility
   const [selectedItems, setSelectedItems] = useState({});
   const [loading, setLoading] = useState(false);
 
@@ -72,6 +74,11 @@ export default function SpareReturnRequest() {
       setInventory([]);
     }
   }, [productGroup, product, model, sparePart]);
+
+  // NEW: Fetch FIFO invoices when cart changes
+  useEffect(() => {
+    fetchCartInvoices();
+  }, [cart]);
 
   const fetchGroups = async () => {
     try {
@@ -156,6 +163,76 @@ export default function SpareReturnRequest() {
     setLoading(false);
   };
 
+  // NEW: Fetch FIFO invoices for cart items
+  const fetchCartInvoices = async () => {
+    if (cart.length === 0) {
+      setCartInvoices({});
+      return;
+    }
+
+    try {
+      console.log('🔍 DEBUG: Cart items structure:');
+      cart.forEach((item, idx) => {
+        console.log(`  Item ${idx}:`, {
+          sku: item.sku,
+          spareName: item.spareName,
+          Id: item.Id,
+          id: item.id,
+          spare_id: item.spare_id,
+          spareId: item.spareId,
+          allKeys: Object.keys(item)
+        });
+      });
+
+      // Extract spare IDs - try multiple field names
+      const spareIds = [];
+      const spareIdMap = {};  // Map to track which item uses which ID
+      
+      cart.forEach((item, idx) => {
+        const spareId = item.spare_id || item.spareId || item.Id || item.id;
+        if (spareId) {
+          spareIds.push(spareId);
+          spareIdMap[spareId] = item;
+          console.log(`  ✓ Item ${idx} (${item.sku}): spareId = ${spareId}`);
+        } else {
+          console.warn(`  ✗ Item ${idx} (${item.sku}): No spare ID found!`);
+        }
+      });
+
+      if (spareIds.length === 0) {
+        console.warn('⚠️  No spare IDs found in cart items');
+        return;
+      }
+
+      const token = localStorage.getItem('token');
+      const spareIdString = spareIds.join(',');
+      
+      console.log('📦 Fetching FIFO invoices for spares:', spareIdString);
+      
+      const response = await fetch(getApiUrl(`/spare-returns/fifo-invoices?spareIds=${spareIdString}`), {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+
+      if (!response.ok) {
+        console.error('❌ API response not OK:', response.status);
+        return;
+      }
+
+      const data = await response.json();
+      console.log('📥 API Response:', data);
+      
+      if (data.success && data.data) {
+        console.log('✅ FIFO invoices fetched:', data.data);
+        console.log('📊 Invoice keys:', Object.keys(data.data));
+        setCartInvoices(data.data);
+      } else {
+        console.warn('⚠️  Invalid response format:', data);
+      }
+    } catch (error) {
+      console.error('❌ Error fetching cart invoices:', error);
+    }
+  };
+
   const handleSelectItem = (sku, checked) => {
     setSelectedItems(prev => ({
       ...prev,
@@ -175,16 +252,44 @@ export default function SpareReturnRequest() {
 
   const addToCart = () => {
     const itemsToAdd = inventory.filter(item => selectedItems[item.sku] && selectedItems[item.sku].returnQty > 0);
-    setCart(prev => [...prev, ...itemsToAdd.map(item => ({
-      ...item,
-      returnQty: selectedItems[item.sku].returnQty
-    }))]);
+    
+    console.log('🛒 Adding to cart:', itemsToAdd.length, 'items');
+    itemsToAdd.forEach(item => {
+      console.log('  Item:', {
+        sku: item.sku,
+        spareName: item.spareName,
+        returnQty: selectedItems[item.sku].returnQty,
+        spare_id: item.spare_id,
+        Id: item.Id,
+        id: item.id,
+        spareId: item.spareId
+      });
+    });
+
+    setCart(prev => [
+      ...prev,
+      ...itemsToAdd.map(item => {
+        // Determine which spare ID field to use
+        const spareId = item.spare_id || item.spareId || item.Id || item.id;
+        return {
+          ...item,
+          returnQty: selectedItems[item.sku].returnQty,
+          spare_id: spareId,  // Ensure spare_id is set
+          spareId: spareId,   // Also set spareId for compatibility
+          Id: spareId,        // Also set Id for compatibility
+          id: spareId         // Also set id for compatibility
+        };
+      })
+    ]);
     setSelectedItems({});
   };
 
   const viewCart = () => {
-    // Show cart modal or navigate
-    alert(`Cart has ${cart.length} items`);
+    setShowCartModal(true);  // Show modal instead of alert
+  };
+
+  const removeFromCart = (index) => {
+    setCart(prev => prev.filter((_, i) => i !== index));
   };
 
   const submitRequest = async () => {
@@ -369,6 +474,129 @@ export default function SpareReturnRequest() {
           Submit
         </button>
       </div>
+
+      {/* NEW: Cart Modal with Invoice Information */}
+      {showCartModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-lg max-w-4xl w-full max-h-[90vh] overflow-auto">
+            <div className="sticky top-0 bg-blue-600 text-white p-6 flex justify-between items-center">
+              <h2 className="text-2xl font-bold">
+                📦 Return Cart ({cart.length} items)
+              </h2>
+              <button
+                onClick={() => setShowCartModal(false)}
+                className="text-2xl font-bold cursor-pointer hover:bg-blue-700 px-3 py-1 rounded"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="p-6">
+              {cart.length === 0 ? (
+                <p className="text-gray-500 text-center py-8">No items in cart</p>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full border-collapse">
+                    <thead>
+                      <tr className="bg-gray-100 border-b-2 border-gray-300">
+                        <th className="p-3 text-left">Part Code</th>
+                        <th className="p-3 text-left">Part Description</th>
+                        <th className="p-3 text-center">Return QTY</th>
+                        <th className="p-3 text-left">Invoice # & Details</th>
+                        <th className="p-3 text-center">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {cart.map((item, index) => {
+                        const spareId = item.spare_id || item.spareId || item.Id || item.id;
+                        const invoiceData = cartInvoices?.[spareId];
+                        
+                        // Debug logging
+                        if (index === 0) {
+                          console.log('🔍 Modal DEBUG - First item:', {
+                            sku: item.sku,
+                            spareId,
+                            cartInvoicesKeys: Object.keys(cartInvoices || {}),
+                            invoiceData,
+                            allCartInvoices: cartInvoices
+                          });
+                        }
+                        
+                        return (
+                          <tr key={index} className="border-b border-gray-200 hover:bg-gray-50">
+                            <td className="p-3">{item.sku}</td>
+                            <td className="p-3">{item.spareName}</td>
+                            <td className="p-3 text-center font-semibold">{item.returnQty}</td>
+                            <td className="p-3">
+                              {invoiceData && invoiceData.sap_doc_number ? (
+                                <div className="bg-blue-50 border border-blue-200 rounded p-3 space-y-1">
+                                  <div className="font-bold text-blue-700 text-sm">
+                                    📄 {invoiceData.sap_doc_number}
+                                  </div>
+                                  {invoiceData.unit_price && (
+                                    <div className="text-xs text-gray-700">
+                                      Rate: <span className="font-semibold">₹{invoiceData.unit_price.toFixed(2)}</span>
+                                    </div>
+                                  )}
+                                  {invoiceData.hsn && (
+                                    <div className="text-xs text-gray-700">
+                                      HSN: <span className="font-semibold">{invoiceData.hsn}</span>
+                                    </div>
+                                  )}
+                                  {invoiceData.gst !== undefined && (
+                                    <div className="text-xs text-gray-700">
+                                      GST: <span className="font-semibold">{invoiceData.gst}%</span>
+                                    </div>
+                                  )}
+                                </div>
+                              ) : (
+                                <div className="bg-yellow-50 border border-yellow-200 rounded p-2 text-xs">
+                                  <div className="text-yellow-700 font-semibold">⏳ Fetching invoice...</div>
+                                  <div className="text-yellow-600 mt-1">
+                                    ID: {spareId} | Keys: {Object.keys(cartInvoices || {}).join(', ')}
+                                  </div>
+                                </div>
+                              )}
+                            </td>
+                            <td className="p-3 text-center">
+                              <button
+                                onClick={() => removeFromCart(index)}
+                                className="px-3 py-1 bg-red-500 text-white rounded hover:bg-red-600 text-sm"
+                              >
+                                Remove
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+
+              <div className="mt-6 flex gap-4 justify-end">
+                <button
+                  onClick={() => setShowCartModal(false)}
+                  className="px-6 py-2 bg-gray-300 text-black rounded hover:bg-gray-400"
+                >
+                  Close
+                </button>
+                {cart.length > 0 && (
+                  <button
+                    onClick={() => {
+                      submitRequest();
+                      setShowCartModal(false);
+                    }}
+                    className="px-6 py-2 bg-green-500 text-white rounded hover:bg-green-600 font-bold"
+                  >
+                    Submit Return Request
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

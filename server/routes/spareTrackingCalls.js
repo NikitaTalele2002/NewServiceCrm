@@ -11,6 +11,7 @@
 import express from 'express';
 import { sequelize } from '../db.js';
 import { authenticateToken } from '../middleware/auth.js';
+import { safeRollback, safeCommit, isTransactionActive } from '../utils/transactionHelper.js';
 import {
   linkReturnItemToCallUsage,
   getCallDetailsForReturn,
@@ -273,17 +274,20 @@ router.get('/spare/:spareId/audit-trail', authenticateToken, async (req, res) =>
  * Called when processing return requests
  */
 router.post('/link-return-to-call', authenticateToken, async (req, res) => {
-  const transaction = await sequelize.transaction();
-
+  let transaction;
   try {
     const { requestId, spareId, callId } = req.body;
 
+    // Validate BEFORE creating transaction
     if (!requestId || !spareId) {
       return res.status(400).json({
         success: false,
         error: 'Missing required fields: requestId, spareId'
       });
     }
+
+    // Create transaction AFTER validation
+    transaction = await sequelize.transaction();
 
     const usage = await linkReturnItemToCallUsage(
       requestId,
@@ -293,7 +297,7 @@ router.post('/link-return-to-call', authenticateToken, async (req, res) => {
       transaction
     );
 
-    await transaction.commit();
+    await safeCommit(transaction);
 
     return res.json({
       success: true,
@@ -302,7 +306,7 @@ router.post('/link-return-to-call', authenticateToken, async (req, res) => {
       message: `Linked return item to call ${usage?.call_id}`
     });
   } catch (error) {
-    if (transaction) await transaction.rollback();
+    await safeRollback(transaction, error);
     console.error(`❌ Error linking return to call: ${error.message}`);
     return res.status(500).json({
       success: false,

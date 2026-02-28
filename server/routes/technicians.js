@@ -182,39 +182,38 @@ router.get('/:technicianId/inventory', async (req, res) => {
 
     console.log('📦 Fetching inventory for technician:', technicianId);
 
-    // Query technician inventory from database
+    // Query from spare_inventory table where location_type='technician'
     const inventory = await sequelize.query(`
       SELECT 
-        ti.id,
-        ti.technician_id,
-        ti.spare_id,
-        ti.good_qty as goodQty,
-        ti.defective_qty as defectiveQty,
-        ti.updated_at as lastUpdated,
-        COALESCE(sp.PART, 'Unknown') as sku,
-        COALESCE(sp.DESCRIPTION, 'Unknown') as spareName
-      FROM technician_inventory ti
-      LEFT JOIN spare_parts sp ON ti.spare_id = sp.Id
-      WHERE ti.technician_id = ?
-      ORDER BY ti.updated_at DESC
+        si.spare_inventory_id as id,
+        si.spare_id,
+        sp.PART,
+        sp.DESCRIPTION,
+        si.qty_good,
+        si.qty_defective,
+        si.updated_at,
+        si.created_at
+      FROM spare_inventory si
+      LEFT JOIN spare_parts sp ON si.spare_id = sp.Id
+      WHERE si.location_type = 'technician'
+      AND si.location_id = ?
+      ORDER BY si.updated_at DESC
     `, { replacements: [technicianId], type: sequelize.QueryTypes.SELECT });
 
     console.log('✅ Found', inventory.length, 'inventory items');
 
-    res.json({
-      success: true,
-      data: inventory.map(item => ({
+    res.json(
+      inventory.map(item => ({
         id: item.id,
-        technicanId: item.technician_id,
         spareId: item.spare_id,
-        sku: item.sku,
-        spareName: item.spareName,
-        goodQty: item.goodQty || 0,
-        defectiveQty: item.defectiveQty || 0,
-        totalQty: (item.goodQty || 0) + (item.defectiveQty || 0),
-        lastUpdated: item.lastUpdated
+        PART: item.PART || '-',
+        DESCRIPTION: item.DESCRIPTION || '-',
+        qty_good: item.qty_good || 0,
+        qty_defective: item.qty_defective || 0,
+        created_at: item.created_at,
+        updated_at: item.updated_at
       }))
-    });
+    );
   } catch (err) {
     console.error('❌ Error fetching technician inventory:', err);
     res.status(500).json({ error: 'Failed to fetch technician inventory', details: err.message });

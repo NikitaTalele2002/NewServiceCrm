@@ -17,6 +17,7 @@ import {
 } from '../models/index.js';
 import { authenticateToken } from '../middleware/auth.js';
 import { QueryTypes } from 'sequelize';
+import { getFIFOInvoicesForSpares, getReturnInvoiceDetails } from '../services/fifoInvoiceMatchingService.js';
 
 const router = express.Router();
 
@@ -162,6 +163,76 @@ router.get('/inventory', authenticateToken, async (req, res) => {
     res.status(500).json({ 
       error: 'Failed to fetch service center inventory', 
       message: err.message 
+    });
+  }
+});
+
+/**
+ * GET /api/spare-returns/fifo-invoices
+ * Get FIFO invoice information for spare items (for cart view)
+ * Query params: spareIds (comma-separated)
+ */
+router.get('/fifo-invoices', authenticateToken, async (req, res) => {
+  let transaction;
+  try {
+    const centerId = req.user?.centerId;
+    const { spareIds } = req.query;
+
+    if (!centerId) {
+      return res.status(400).json({ error: 'Service center ID required' });
+    }
+
+    if (!spareIds) {
+      return res.status(400).json({ error: 'spareIds query parameter required' });
+    }
+
+    // Parse spare IDs
+    const spareIdArray = spareIds
+      .split(',')
+      .map(id => parseInt(id.trim()))
+      .filter(id => !isNaN(id));
+
+    if (spareIdArray.length === 0) {
+      return res.status(400).json({ error: 'No valid spare IDs provided' });
+    }
+
+    // Get service center details (plant_id needed for FIFO)
+    const sc = await ServiceCenter.findByPk(centerId);
+    if (!sc) {
+      return res.status(404).json({ error: 'Service center not found' });
+    }
+
+    console.log(`🔍 [FIFO-INVOICES] Getting FIFO invoices for spares: ${spareIdArray.join(', ')} at SC ${centerId}`);
+
+    // Start transaction for consistency
+    transaction = await sequelize.transaction();
+
+    // Get FIFO invoices using the service function
+    const invoiceMap = await getFIFOInvoicesForSpares(spareIdArray, centerId, sc.plant_id, transaction);
+
+    // Format response
+    const result = {};
+    for (const spareId of spareIdArray) {
+      const invoiceData = invoiceMap.get(spareId);
+      result[spareId] = invoiceData || null;
+    }
+
+    await transaction.commit();
+
+    console.log(`✅ [FIFO-INVOICES] Retrieved FIFO invoices: ${Object.keys(result).filter(k => result[k]).length}/${spareIdArray.length} found`);
+
+    res.json({
+      success: true,
+      data: result,
+      count: Object.values(result).filter(v => v).length
+    });
+
+  } catch (error) {
+    if (transaction) await transaction.rollback();
+    console.error('❌ [FIFO-INVOICES] Error:', error.message);
+    res.status(500).json({
+      error: 'Failed to fetch FIFO invoices',
+      message: error.message
     });
   }
 });
@@ -377,6 +448,17 @@ router.post('/create', authenticateToken, async (req, res) => {
 
     console.log('📋 Processing items:', JSON.stringify(items, null, 2));
 
+    // ===== STEP 1: GET FIFO INVOICES FOR ALL SPARES =====
+    const spareIds = items
+      .filter(item => item.spareId !== null && item.spareId !== undefined)
+      .map(item => parseInt(item.spareId));
+    
+    console.log(`[FIFO] Getting invoices for ${spareIds.length} unique spares using FIFO...`);
+    const invoiceMap = await getFIFOInvoicesForSpares(spareIds, centerId, sc.plant_id, transaction);
+    console.log(`✅ [FIFO] Retrieved invoices for ${invoiceMap.size} spares`);
+
+    // ===== STEP 2: PROCESS ITEMS WITH INVOICE DATA =====
+
     for (const item of items) {
       const { spareId, returnQty, remainingQty } = item;
 
@@ -388,21 +470,47 @@ router.post('/create', authenticateToken, async (req, res) => {
         continue;
       }
 
+      // ===== GET INVOICE DATA FOR THIS SPARE (FIFO MATCH) =====
+      const spareIdInt = parseInt(spareId);
+      const invoiceData = invoiceMap.get(spareIdInt);
+      
+      if (invoiceData) {
+        console.log(`  ✅ [FIFO] Spare ${spareIdInt} matched to invoice: ${invoiceData.sap_doc_number}, Rate: ${invoiceData.unit_price}, HSN: ${invoiceData.hsn}`);
+      } else {
+        console.log(`  ⚠️  [FIFO] No FIFO invoice found for spare ${spareIdInt}, using master data`);
+      }
+
       const requestItem = await SpareRequestItem.create({
         request_id: returnRequest.request_id,
-        spare_id: parseInt(spareId),
+        spare_id: spareIdInt,
         requested_qty: parseInt(returnQty),
-        approved_qty: 0
+        approved_qty: 0,
+        // Store FIFO invoice data as JSON for debit note generation
+        invoice_data: invoiceData ? JSON.stringify({
+          sap_doc_number: invoiceData.sap_doc_number,
+          invoice_number: invoiceData.invoice_number,
+          unit_price: invoiceData.unit_price,
+          gst: invoiceData.gst,
+          hsn: invoiceData.hsn,
+          invoice_date: invoiceData.invoice_date,
+          qty_received: invoiceData.qty
+        }) : null
       }, { transaction });
 
-      // Calculate item amount for stock movement
+      // Calculate item amount for stock movement using FIFO invoice price
       const sparePart = await SparePart.findByPk(parseInt(spareId), { transaction });
-      const itemAmount = (sparePart?.SAP_PRICE || 0) * parseInt(returnQty);
+      
+      // Use FIFO invoice unit price if available, otherwise use SAP price
+      const unitPrice = invoiceData?.unit_price || sparePart?.SAP_PRICE || 0;
+      const itemAmount = unitPrice * parseInt(returnQty);
       totalAmount += itemAmount;
+
+      console.log(`  💰 Item amount: ${itemAmount} (unitPrice: ${unitPrice}, qty: ${returnQty})`);
 
       requestItems.push({
         ...requestItem.toJSON(),
-        remainingQty
+        remainingQty,
+        fifo_invoice: invoiceData || {}  // Attach invoice data to response
       });
 
       totalQty += parseInt(returnQty);
@@ -415,6 +523,18 @@ router.post('/create', authenticateToken, async (req, res) => {
       console.error('❌ No valid items could be created. Input items:', JSON.stringify(items, null, 2));
       return res.status(400).json({ error: 'No valid items in request', details: 'All items were rejected during processing' });
     }
+
+    // ===== STEP 3: COLLECT INVOICE REFERENCES FROM FIFO DATA =====
+    const invoiceReferences = Array.from(invoiceMap.values())
+      .filter(inv => inv && inv.sap_doc_number)
+      .map(inv => inv.sap_doc_number)
+      .filter((v, i, a) => a.indexOf(v) === i);  // Deduplicate
+    
+    const invoiceRefString = invoiceReferences.length > 0 
+      ? invoiceReferences.join(', ') 
+      : 'NO_INVOICE_MATCHED';
+    
+    console.log(`📝 [FIFO] INVOICES FROM WHICH SPARES WERE RECEIVED: ${invoiceRefString}`);
 
     // Create stock movement record for the return request
     console.log(`📊 Creating stock movement for return request ${returnRequest.request_id}`);
@@ -431,10 +551,12 @@ router.post('/create', authenticateToken, async (req, res) => {
       total_amount: totalAmount,
       movement_date: new Date(),
       created_by: userId,
-      status: 'pending'
+      status: 'pending',
+      // Store FIFO invoice references for traceability
+      memo: `FIFO Invoices: ${invoiceRefString}`
     }, { transaction });
 
-    console.log(`✅ Stock movement ${stockMovement.movement_id} created for return request`);
+    console.log(`✅ Stock movement ${stockMovement.movement_id} created for return request with FIFO invoice references: ${invoiceRefString}`);
 
     // Update inventory for both source and destination
     console.log(`📦 Updating inventory for source and destination locations`);

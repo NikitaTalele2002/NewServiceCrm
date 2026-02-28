@@ -8,6 +8,7 @@
 import { sequelize } from '../db.js';
 import fs from 'fs';
 import path from 'path';
+import { safeRollback, safeCommit, isTransactionActive } from '../utils/transactionHelper.js';
 
 // File-based logging for debugging - use absolute path to be safe
 const logDir = 'c:\\Crm_dashboard';
@@ -385,7 +386,7 @@ export async function processDeliveryReception(params) {
 
     // Commit transaction
     console.log('📝 Committing transaction...');
-    await transaction.commit();
+    await safeCommit(transaction);
     console.log('✅ Transaction committed successfully');
 
     return {
@@ -399,16 +400,7 @@ export async function processDeliveryReception(params) {
     console.error('❌ Error in processDeliveryReception:', error.message);
     console.error('Stack:', error.stack);
     
-    if (transaction) {
-      try {
-        console.log('📝 Rolling back transaction...');
-        await transaction.rollback();
-        console.log('✅ Transaction rolled back');
-      } catch (rollbackError) {
-        console.error('❌ Error rolling back transaction:', rollbackError.message);
-      }
-    }
-    
+    await safeRollback(transaction, error);
     throw error;
   }
 }

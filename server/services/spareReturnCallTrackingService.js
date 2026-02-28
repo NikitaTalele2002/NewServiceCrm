@@ -208,7 +208,7 @@ export async function traceSpareToOriginalCalls(spareId) {
 
     return calls;
   } catch (error) {
-    console.error(`❌ Error tracing spare to calls: ${error.message}`);
+    console.error(`Error tracing spare to calls: ${error.message}`);
     throw error;
   }
 }
@@ -281,7 +281,7 @@ export async function createMovementWithCallReference(
 
     return movement;
   } catch (error) {
-    console.error(`❌ Error creating movement with call reference: ${error.message}`);
+    console.error(`Error creating movement with call reference: ${error.message}`);
     throw error;
   }
 }
@@ -368,7 +368,7 @@ export async function getSpareAuditTrail(spareId) {
 
     return trail;
   } catch (error) {
-    console.error(`❌ Error getting audit trail: ${error.message}`);
+    console.error(`Error getting audit trail: ${error.message}`);
     throw error;
   }
 }

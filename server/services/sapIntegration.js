@@ -197,22 +197,11 @@ export function formatSAPDataForDB(sapData, fromEntity, toEntity) {
  */
 export async function getInvoiceByRequestId(requestId, sequelize) {
   try {
-    // Find the SO (Sales Order) first
-    const soDoc = await sequelize.models.LogisticsDocuments.findOne({
-      where: {
-        reference_id: requestId,
-        document_type: 'SO'
-      }
-    });
-
-    if (!soDoc) {
-      return null;
-    }
-
-    // Find invoice by SO reference
+    // Find invoice directly by request ID
+    // Since both SO and INVOICE reference the same spare_request_id
     const invoice = await sequelize.models.SAPDocuments.findOne({
       where: {
-        reference_id: soDoc.document_number,  // SO number
+        reference_id: requestId,  // Use requestId directly (INTEGER)
         sap_doc_type: 'INVOICE',
         module_type: 'spare_request'
       }
@@ -233,9 +222,22 @@ export async function getInvoiceByRequestId(requestId, sequelize) {
  */
 export async function getInvoiceBySONumber(soNumber, sequelize) {
   try {
+    // Find the SO document by number to get the requestId
+    const soDoc = await sequelize.models.LogisticsDocuments.findOne({
+      where: {
+        document_number: soNumber,  // SO number is the document_number
+        document_type: 'SO'
+      }
+    });
+
+    if (!soDoc) {
+      return null;
+    }
+
+    // Find invoice using the reference_id (spare_request_id)
     const invoice = await sequelize.models.SAPDocuments.findOne({
       where: {
-        reference_id: soNumber,  // SO number is the reference
+        reference_id: soDoc.reference_id,  // Use the INTEGER reference_id
         sap_doc_type: 'INVOICE'
       }
     });
