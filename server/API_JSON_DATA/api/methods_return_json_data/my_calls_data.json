@@ -1,0 +1,37 @@
+{
+    "request": {
+        "method": "GET",
+        "url": "/api/technician-mobile/my-calls",
+        "headers": {
+            "Authorization": "Bearer {{token}}"
+        }
+    },
+    "response": {
+        "success": true,
+        "technicianId": 11,
+        "totalCalls": 8,
+        "calls": [
+            {
+                "callId": "3",
+                "customerId": 5,
+                "customerName": "neha",
+                "mobileNumber": "1234567890",
+                "product": "Refrigerator",
+                "model": "REF-GL-300",
+                "serialNumber": "SN12345",
+                "callType": "complaint",
+                "status": {
+                    "statusId": 1,
+                    "statusName": "pending"
+                },
+                "serviceCenter": {
+                    "ascId": 2,
+                    "ascName": "Mumbai Service Center",
+                    "ascCode": "ASC001"
+                },
+                "assignedTechnicianId": 11,
+                "technicianName": "Vikas Test Technician v2"
+            }
+        ]
+    }
+}

@@ -1,0 +1,35 @@
+{
+    "request": {
+        "method": "POST",
+        "url": "/api/technician-spare-returns/create",
+        "body": {
+            "callId": 101,
+            "items": [
+                {
+                    "spareId": 2,
+                    "itemType": "defective",
+                    "requestedQty": 1,
+                    "defectReason": "Smashed screen"
+                },
+                {
+                    "spareId": 5,
+                    "itemType": "unused",
+                    "requestedQty": 1
+                }
+            ],
+            "remarks": "Returning parts after repair"
+        }
+    },
+    "response": {
+        "success": true,
+        "returnId": 22,
+        "returnNumber": "TSR-20260227-AX7B9C3D2",
+        "status": "submitted",
+        "message": "Spare return request submitted successfully",
+        "summary": {
+            "defectiveCount": 1,
+            "unusedCount": 1,
+            "totalItems": 2
+        }
+    }
+}

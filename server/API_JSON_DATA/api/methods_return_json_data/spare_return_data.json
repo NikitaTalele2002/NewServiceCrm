@@ -1,0 +1,33 @@
+{
+    "request": {
+        "method": "POST",
+        "url": "/api/technician-mobile/spare-returns/create",
+        "headers": {
+            "Authorization": "Bearer {{token}}"
+        },
+        "body": {
+            "callId": 3,
+            "items": [
+                {
+                    "spareId": 2,
+                    "itemType": "defective",
+                    "requestedQty": 1,
+                    "defectReason": "Damaged gasket"
+                }
+            ],
+            "remarks": "Returning defective parts from call 3"
+        }
+    },
+    "response": {
+        "success": true,
+        "returnId": 1,
+        "returnNumber": "TSR-174066XXXXXXX",
+        "status": "submitted",
+        "message": "Spare return request submitted successfully",
+        "summary": {
+            "defectiveCount": 1,
+            "unusedCount": 0,
+            "totalItems": 1
+        }
+    }
+}

@@ -3,25 +3,25 @@ import { Users, ServiceCenter } from '../models/index.js';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'supersecret_jwt_key_change_me';
 
-async function findUserByUsername(username){
-  if(!username) return null;
+async function findUserByUsername(username) {
+  if (!username) return null;
   try {
     // Try name lookup first
     let user = await Users.findOne({ where: { name: username } });
-    if(user) {
+    if (user) {
       console.log(`✓ User found by name: ${username}`);
       return user;
     }
-    
+
     // Try user_id lookup (if username is numeric)
-    if(!isNaN(username)) {
+    if (!isNaN(username)) {
       user = await Users.findOne({ where: { user_id: parseInt(username) } });
-      if(user) {
+      if (user) {
         console.log(`✓ User found by user_id: ${username}`);
         return user;
       }
     }
-    
+
     console.log(`✗ User not found: ${username}`);
     return null;
   } catch (err) {
@@ -31,9 +31,9 @@ async function findUserByUsername(username){
 }
 
 function createTokenForUser(user, role, serviceCenterId, branchId, rsmId = null) {
-  const payload = { 
-    id: user.user_id, 
-    username: user.name, 
+  const payload = {
+    id: user.user_id,
+    username: user.name,
     role: role || 'call_center',
     centerId: serviceCenterId || user.centerId || user.ServiceCenterId || null
   };
@@ -48,20 +48,20 @@ function createTokenForUser(user, role, serviceCenterId, branchId, rsmId = null)
   return token;
 }
 
-async function authenticateCredentials(username, password){
+async function authenticateCredentials(username, password) {
   try {
     console.log(`\n🔐 Authentication attempt for: ${username}`);
-    
+
     const user = await findUserByUsername(username);
-    if(!user) {
+    if (!user) {
       console.log(`✗ Authentication failed: User not found`);
       return { success: false, error: 'User not found' };
     }
 
     console.log(`Checking password for user: ${user.name} (ID: ${user.user_id})`);
-    
+
     // Check password (plain text for now - should be hashed in production)
-    if(user.password !== password) {
+    if (user.password !== password) {
       console.log(`✗ Authentication failed: Invalid password for ${user.name}`);
       return { success: false, error: 'Invalid password' };
     }
@@ -134,7 +134,7 @@ async function authenticateCredentials(username, password){
             if (rsmResult && rsmResult[0] && rsmResult[0].rsm_id) {
               rsmId = rsmResult[0].rsm_id;  // Assign to outer scope variable
               console.log(`✓ Found RSM ID: ${rsmId} for user_id: ${user.user_id}`);
-              
+
               // Fetch a service center for this RSM's assigned plants
               try {
                 const scResult = await sequelize.query(
@@ -174,18 +174,18 @@ async function authenticateCredentials(username, password){
     // Create token with centerId for service center users, branchId for branch users, rsmId for RSM users
     const token = createTokenForUser({ ...user.toJSON(), role }, role, serviceCenterId, branchId, rsmId);
 
-    const response = { 
-      success: true, 
+    const response = {
+      success: true,
       user: {
         user_id: user.user_id,
         username: user.name,
         name: user.name,
         Role: role,
         centerId: serviceCenterId || null
-      }, 
+      },
       token
     };
-    
+
     // Log response for debugging
     console.log(`[authService] Login response for ${user.name}:`, {
       role,

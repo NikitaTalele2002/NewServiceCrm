@@ -1,0 +1,43 @@
+{
+    "request": {
+        "method": "POST",
+        "url": "/api/technician-mobile/tracking/spare-consumption",
+        "headers": {
+            "Authorization": "Bearer {{token}}"
+        },
+        "body": {
+            "call_id": 3,
+            "spare_id": 2,
+            "used_qty": 1,
+            "defective_qty": 1,
+            "remarks": "Replaced filter gasket"
+        }
+    },
+    "response": {
+        "ok": true,
+        "success": true,
+        "message": "Spare consumption recorded successfully with inventory updates",
+        "data": {
+            "success": true,
+            "callId": 3,
+            "technicianId": 11,
+            "usageRecords": [
+                {
+                    "usageId": 1,
+                    "spareId": 2,
+                    "spareName": "Filter Gasket",
+                    "usedQty": 1,
+                    "defectiveQty": 1
+                }
+            ],
+            "inventoryUpdates": [
+                {
+                    "spareId": 2,
+                    "spareName": "Filter Gasket",
+                    "goodDecreased": 2,
+                    "defectiveIncreased": 1
+                }
+            ]
+        }
+    }
+}

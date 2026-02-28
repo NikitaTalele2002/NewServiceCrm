@@ -4,7 +4,7 @@ import { sequelize, SpareRequest, SpareRequestItem, Branch, ServiceCentre, Techn
 export async function getBranchDashboard(branchId) {
   try {
     const pendingCount = await SpareRequest.count({ where: { BranchId: branchId, Status: 'pending' } });
-    
+
     const [lowStockItems] = await sequelize.query(
       `SELECT COUNT(*) as cnt FROM BranchInventory 
        WHERE BranchId = ? AND GoodQty <= MinimumStockLevel`,
@@ -50,27 +50,27 @@ export async function listBranchRequests(branchId) {
           console.warn(`Failed to fetch items for request ${req.Id}:`, e.message);
           req.Items = [];
         }
-        
+
         try {
-          const [branch] = await sequelize.query('SELECT BranchName FROM Branches WHERE Id = ?', { 
-            replacements: [req.BranchId], 
-            type: sequelize.QueryTypes.SELECT 
+          const [branch] = await sequelize.query('SELECT BranchName FROM Branches WHERE Id = ?', {
+            replacements: [req.BranchId],
+            type: sequelize.QueryTypes.SELECT
           });
           req.Branch = branch || {};
         } catch (e) {
           req.Branch = {};
         }
-        
+
         try {
-          const [sc] = await sequelize.query('SELECT CenterName FROM ServiceCenters WHERE Id = ?', { 
-            replacements: [req.ServiceCenterId], 
-            type: sequelize.QueryTypes.SELECT 
+          const [sc] = await sequelize.query('SELECT CenterName FROM ServiceCenters WHERE Id = ?', {
+            replacements: [req.ServiceCenterId],
+            type: sequelize.QueryTypes.SELECT
           });
           req.ServiceCentre = sc || {};
         } catch (e) {
           req.ServiceCentre = {};
         }
-        
+
         return req;
       })
     );
@@ -136,7 +136,7 @@ export async function approveBranchRequest(requestId, branchId, approvedQtys = {
     const branchName = 'branch_user';
     for (const item of request.Items) {
       const approvedQty = approvedQtys[item.Id] || item.RequestedQty;
-      
+
       await item.update({ ApprovedQty: approvedQty });
 
       const inv = await BranchInventory.findOne({
@@ -305,7 +305,7 @@ export async function createSpareRequest(branchId, items, scId) {
 export async function getServiceCenterInventory(scId) {
   try {
     const ServiceCenterInventory = sequelize.models.ServiceCenterInventory;
-    
+
     if (!ServiceCenterInventory) {
       return { ok: true, inventory: [] };
     }
@@ -442,7 +442,7 @@ export async function getBranchReturnRequestDetails(id, branchId) {
         raw: true
       });
     });
-    
+
     if (requestCheck.length === 0) {
       throw new Error('Request not found');
     }
@@ -512,27 +512,27 @@ export async function updateBranchReturnRequestItems(id, branchId, items) {
       if (itemData.length === 0) {
         throw new Error(`Item ${item.partCode || item.sku} not found in request`);
       }
-      
+
       const requestedQty = parseInt(itemData[0].RequestedQty) || 0;
       const receivedQty = parseInt(item.receivedQty) || 0;
       const approvedQty = parseInt(item.approvedQty) || 0;
       const rejectedQty = parseInt(item.rejectedQty) || 0;
-      
+
       if (receivedQty > requestedQty) {
         throw new Error(`C&F Received QTY for ${item.partCode || item.sku} cannot exceed QTY DCF (${requestedQty})`);
       }
-      
+
       if (approvedQty > receivedQty) {
         throw new Error(`C&F Approved QTY for ${item.partCode || item.sku} cannot exceed Received QTY (${receivedQty})`);
       }
-      
+
       if (approvedQty > 0) {
         hasApprovals = true;
       }
       if (rejectedQty > 0) {
         hasRejections = true;
       }
-      
+
       await sequelize.query(`
         UPDATE SpareRequestItems SET ReceivedQty = ?, ApprovedQty = ?, RejectedQty = ? WHERE RequestId = ? AND Sku = ?
       `, {

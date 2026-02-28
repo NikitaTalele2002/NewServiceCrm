@@ -1,0 +1,24 @@
+[
+    {
+        "Id": 254,
+        "spare_id": 2,
+        "SpareName": "Samsung Display Panel 55\"",
+        "Sku": "2",
+        "GoodQty": 0,
+        "DefectiveQty": 1,
+        "ModelID": 12,
+        "MODEL_DESCRIPTION": "UA55AU7700",
+        "BRAND": "Samsung"
+    },
+    {
+        "Id": 255,
+        "spare_id": 5,
+        "SpareName": "Power Cable Type C",
+        "Sku": "5",
+        "GoodQty": 2,
+        "DefectiveQty": 0,
+        "ModelID": 0,
+        "MODEL_DESCRIPTION": null,
+        "BRAND": "Universal"
+    }
+]

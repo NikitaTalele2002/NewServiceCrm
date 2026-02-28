@@ -1,0 +1,31 @@
+{
+    "request": {
+        "method": "GET",
+        "url": "/api/technician-mobile/inventory",
+        "headers": {
+            "Authorization": "Bearer {{token}}"
+        }
+    },
+    "response": {
+        "success": true,
+        "count": 5,
+        "data": [
+            {
+                "Id": 1,
+                "SparePartId": 2,
+                "Sku": "000000FCCSNSTGS101",
+                "SpareName": "Filter Gasket",
+                "GoodQty": 31,
+                "DefectiveQty": 0
+            },
+            {
+                "Id": 3,
+                "SparePartId": 3355,
+                "Sku": "TEST-FILTER-SPARE-001",
+                "SpareName": "Test Filter",
+                "GoodQty": 4,
+                "DefectiveQty": 0
+            }
+        ]
+    }
+}

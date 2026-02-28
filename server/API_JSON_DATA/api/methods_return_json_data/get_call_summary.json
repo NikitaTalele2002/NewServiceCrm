@@ -1,0 +1,54 @@
+{
+    "request": {
+        "method": "GET",
+        "url": "/api/technician-tracking/summary/101"
+    },
+    "response": {
+        "ok": true,
+        "callId": 101,
+        "summary": {
+            "spares": {
+                "count": 1,
+                "consumed": 1,
+                "partial": 0,
+                "unused": 0,
+                "details": [
+                    {
+                        "usage_id": 56,
+                        "spare_part_id": 2,
+                        "spare_name": "Samsung Display Panel 55\"",
+                        "brand": "Samsung",
+                        "issued_qty": 1,
+                        "used_qty": 1,
+                        "returned_qty": 0,
+                        "usage_status": "USED"
+                    }
+                ]
+            },
+            "tat": {
+                "id": 89,
+                "tat_start_time": "2026-02-26T10:00:00Z",
+                "tat_end_time": null,
+                "tat_status": "in_progress",
+                "total_hold_minutes": 15,
+                "elapsed_minutes": 1440,
+                "status_label": "In Progress"
+            },
+            "holds": {
+                "count": 1,
+                "active": 0,
+                "resolved": 1,
+                "details": [
+                    {
+                        "tat_holds_id": 12,
+                        "hold_reason": "Customer not available",
+                        "hold_start_time": "2026-02-26T14:00:00Z",
+                        "hold_end_time": "2026-02-26T14:15:00Z",
+                        "hold_duration_minutes": 15,
+                        "hold_status": "RESOLVED"
+                    }
+                ]
+            }
+        }
+    }
+}

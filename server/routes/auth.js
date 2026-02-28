@@ -7,6 +7,7 @@ const JWT_SECRET = 'supersecret_jwt_key_change_me';
 
 // Public routes
 router.post('/login', authController.login);
+router.post('/mobile-login', authController.mobileLogin);
 router.post('/logout', authController.logout);
 
 /**

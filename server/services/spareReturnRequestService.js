@@ -345,10 +345,10 @@ export async function receiveReturnRequest(returnRequestId, serviceCenterId, rec
       // Reduce from technician inventory
       // NOTE: TechnicianInventory and ServiceCenterInventory tables don't exist in current database
       // Inventory tracking is done via stock_movement table
-      
+
       // TODO: Implement inventory tracking using spare_inventory table or equivalent
       // For now, we just track the movement in stock_movement table
-      
+
       /*
       const techInventory = await TechnicianInventory.findOne({
         where: {
@@ -379,7 +379,7 @@ export async function receiveReturnRequest(returnRequestId, serviceCenterId, rec
       let scInventory = await ServiceCenterInventory.findOne({
         where: {
           Sku: requestItem.Sku,
-          ServiceCentreId: serviceCenterId
+          ServiceCenterId: serviceCenterId
         },
         transaction
       });
@@ -480,9 +480,9 @@ export async function verifyReturnRequest(returnRequestId, serviceCenterId, veri
       if (requestItem) {
         const verifiedTotal = (item.verified_good_qty || 0) + (item.verified_defective_qty || 0);
         totalVerifiedQty += verifiedTotal;
-        
+
         console.log(`  - Item ${item.return_item_id}: Good=${item.verified_good_qty}, Defective=${item.verified_defective_qty}`);
-        
+
         // Update with verified quantities
         await requestItem.update({
           ApprovedQty: verifiedTotal,
@@ -506,7 +506,7 @@ export async function verifyReturnRequest(returnRequestId, serviceCenterId, veri
     try {
       const goodQty = verified_items.reduce((sum, i) => sum + (i.verified_good_qty || 0), 0);
       const defectiveQty = verified_items.reduce((sum, i) => sum + (i.verified_defective_qty || 0), 0);
-      
+
       await sequelize.query(`
         INSERT INTO approvals (
           entity_type,
@@ -520,7 +520,7 @@ export async function verifyReturnRequest(returnRequestId, serviceCenterId, veri
           updated_at
         )
         VALUES (?, ?, ?, ?, 'approved', ?, GETDATE(), GETDATE(), GETDATE())
-      `, { 
+      `, {
         replacements: [
           'return_request',
           returnRequestId,
@@ -706,7 +706,7 @@ export async function verifyReturnRequest(returnRequestId, serviceCenterId, veri
 
     // Update return request status to verified
     console.log(`\n📝 Updating return request status to verified`);
-    
+
     const verifiedStatus = await Status.findOne({
       where: { status_name: 'verified' },
       transaction
@@ -804,7 +804,7 @@ export async function rejectReturnRequest(returnRequestId, rejectData, transacti
           updated_at
         )
         VALUES (?, ?, ?, ?, 'rejected', ?, GETDATE(), GETDATE(), GETDATE())
-      `, { 
+      `, {
         replacements: [
           'return_request',
           returnRequestId,

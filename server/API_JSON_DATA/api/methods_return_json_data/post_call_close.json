@@ -1,0 +1,27 @@
+{
+    "request": {
+        "method": "POST",
+        "url": "/api/technician-tracking/call/101/close",
+        "body": {
+            "technician_id": 7,
+            "status": "closed"
+        }
+    },
+    "response": {
+        "ok": true,
+        "message": "Call closed and spare movements processed successfully",
+        "callId": 101,
+        "data": {
+            "call_id": 101,
+            "status_id": 8,
+            "status_name": "closed",
+            "technician_id": 7,
+            "spare_movements": {
+                "stock_movements_created": 1,
+                "goods_movement_items_created": 1,
+                "inventory_updates": 1,
+                "total_usages": 1
+            }
+        }
+    }
+}

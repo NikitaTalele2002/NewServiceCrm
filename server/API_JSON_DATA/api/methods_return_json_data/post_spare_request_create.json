@@ -1,0 +1,26 @@
+{
+    "request": {
+        "method": "POST",
+        "url": "/api/technician-spare-requests/create",
+        "body": {
+            "technician_id": 7,
+            "call_id": 101,
+            "request_type": "spare_request",
+            "request_reason": "Broken screen",
+            "items": [
+                {
+                    "spare_id": 2,
+                    "quantity": 1
+                }
+            ]
+        }
+    },
+    "response": {
+        "success": true,
+        "message": "Spare request created successfully!",
+        "data": {
+            "requestId": 15,
+            "requestRef": "REQ-15"
+        }
+    }
+}

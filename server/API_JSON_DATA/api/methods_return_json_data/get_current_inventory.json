@@ -1,0 +1,19 @@
+{
+    "request": {
+        "method": "GET",
+        "url": "/api/inventory/current"
+    },
+    "response": [
+        {
+            "Id": 254,
+            "spare_id": 2,
+            "SpareName": "Samsung Display Panel 55\"",
+            "Sku": "2",
+            "GoodQty": 0,
+            "DefectiveQty": 1,
+            "ModelID": 12,
+            "MODEL_DESCRIPTION": "UA55AU7700",
+            "BRAND": "Samsung"
+        }
+    ]
+}

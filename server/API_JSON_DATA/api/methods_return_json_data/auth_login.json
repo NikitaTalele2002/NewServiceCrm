@@ -1,0 +1,25 @@
+{
+    "request": {
+        "method": "POST",
+        "url": "/api/auth/mobile-login",
+        "body": {
+            "mobile_no": "9999999991"
+        }
+    },
+    "response": {
+        "success": true,
+        "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MTEsInVzZXJuYW1lIjoiVmlrYXMgVGVzdCBUZWNobmljaWFuIHYyIiwicm9sZSI6InRlY2huaWNpYW4iLCJjZW50ZXJJZCI6MiwiaWF0IjoxNzcyMTg4NzM1LCJleHAiOjE3NzIyMTc1MzV9.PFr2SpNltBUqR8yUDHsrfRiakRLoUrRYOsvh28o5060",
+        "user": {
+            "user_id": 11,
+            "username": "Vikas Test Technician v2",
+            "Role": "technician",
+            "service_center_id": 2,
+            "centerId": 2
+        },
+        "user_id": 11,
+        "role": "technician",
+        "username": "Vikas Test Technician v2",
+        "id": 11,
+        "serviceCenterId": 2
+    }
+}

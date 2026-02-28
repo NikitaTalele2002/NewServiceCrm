@@ -265,31 +265,31 @@ export async function updateReturnRequestItems(id, branchId, items) {
         where: { RequestId: id, Sku: item.sku },
         transaction
       });
-      
+
       if (!spareItem) {
         throw new Error(`Item ${item.sku} not found in request`);
       }
-      
+
       const requestedQty = spareItem.RequestedQty || 0;
       const receivedQty = item.receivedQty || 0;
       const approvedQty = item.approvedQty || 0;
       const rejectedQty = item.rejectedQty || 0;
-      
+
       if (receivedQty > requestedQty) {
         throw new Error(`C&F Received QTY for ${item.sku} cannot exceed QTY DCF (${requestedQty})`);
       }
-      
+
       if (approvedQty > receivedQty) {
         throw new Error(`C&F Approved QTY for ${item.sku} cannot exceed Received QTY (${receivedQty})`);
       }
-      
+
       if (approvedQty > 0) {
         hasApprovals = true;
       }
       if (rejectedQty > 0) {
         hasRejections = true;
       }
-      
+
       await SpareRequestItem.update(
         { ReceivedQty: receivedQty, ApprovedQty: approvedQty, RejectedQty: rejectedQty },
         { where: { RequestId: id, Sku: item.sku }, transaction }
@@ -305,7 +305,7 @@ export async function updateReturnRequestItems(id, branchId, items) {
         if (hasRejections) {
           updateData.CfRejectionDate = currentDate;
         }
-        
+
         await SpareRequest.update(updateData, {
           where: { Id: id },
           transaction

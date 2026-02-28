@@ -1,0 +1,20 @@
+{
+    "request": {
+        "method": "GET",
+        "url": "/api/technician-mobile/dashboard",
+        "headers": {
+            "Authorization": "Bearer {{token}}"
+        }
+    },
+    "response": {
+        "success": true,
+        "data": {
+            "technicianName": "Vikas Test Technician v2",
+            "totalCalls": 8,
+            "pendingCalls": 8,
+            "completedCalls": 0,
+            "totalSparesAvailable": 0,
+            "pendingSpareRequests": 0
+        }
+    }
+}

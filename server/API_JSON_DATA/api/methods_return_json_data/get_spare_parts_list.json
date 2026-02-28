@@ -1,0 +1,21 @@
+{
+    "request": {
+        "method": "GET",
+        "url": "/api/technician-spare-requests/spares"
+    },
+    "response": {
+        "success": true,
+        "data": [
+            {
+                "Id": 2,
+                "PART": "SP002",
+                "DESCRIPTION": "Samsung Display Panel 55\""
+            },
+            {
+                "Id": 5,
+                "PART": "SP005",
+                "DESCRIPTION": "Power Cable Type C"
+            }
+        ]
+    }
+}

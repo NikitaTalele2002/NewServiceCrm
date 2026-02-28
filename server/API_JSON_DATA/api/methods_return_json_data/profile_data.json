@@ -1,0 +1,25 @@
+{
+    "request": {
+        "method": "GET",
+        "url": "/api/technician-mobile/profile",
+        "headers": {
+            "Authorization": "Bearer {{token}}"
+        }
+    },
+    "response": {
+        "success": true,
+        "data": {
+            "id": 11,
+            "name": "Vikas Test Technician v2",
+            "mobile": "9999999991",
+            "email": "vikas@example.com",
+            "status": "Active",
+            "createdAt": "2024-03-20T10:00:00.000Z",
+            "serviceCenter": "Test Service Center",
+            "city": "N/A",
+            "area": "N/A",
+            "expertise": "Certified Technician",
+            "profileImage": null
+        }
+    }
+}

@@ -1,0 +1,31 @@
+{
+    "request": {
+        "method": "POST",
+        "url": "/api/technician-tracking/spare-consumption",
+        "body": {
+            "call_id": 101,
+            "spare_part_id": 2,
+            "issued_qty": 1,
+            "used_qty": 1,
+            "returned_qty": 0,
+            "used_by_tech_id": 7,
+            "remarks": "Replaced original defective panel"
+        }
+    },
+    "response": {
+        "ok": true,
+        "message": "Spare consumption recorded successfully with defective tracking",
+        "usage_id": 56,
+        "data": {
+            "call_id": 101,
+            "spare_part_id": 2,
+            "issued_qty": 1,
+            "used_qty": 1,
+            "returned_qty": 0,
+            "usage_status": "USED",
+            "technician_id": 7,
+            "defective_tracked": true,
+            "remarks": "Replaced original defective panel"
+        }
+    }
+}

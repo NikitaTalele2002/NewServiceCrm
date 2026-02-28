@@ -1,0 +1,22 @@
+{
+    "request": {
+        "method": "POST",
+        "url": "/api/technician-tracking/tat-holds",
+        "body": {
+            "call_id": 101,
+            "hold_reason": "Customer not available",
+            "created_by": 7
+        }
+    },
+    "response": {
+        "ok": true,
+        "message": "TAT hold recorded",
+        "tat_holds_id": 12,
+        "data": {
+            "call_id": 101,
+            "hold_reason": "Customer not available",
+            "hold_start_time": "2026-02-27T13:10:00Z",
+            "hold_status": "ACTIVE"
+        }
+    }
+}

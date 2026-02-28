@@ -1,0 +1,30 @@
+{
+    "request": {
+        "method": "POST",
+        "url": "/api/technician-mobile/spare-requests",
+        "headers": {
+            "Authorization": "Bearer {{token}}"
+        },
+        "body": {
+            "callId": 3,
+            "items": [
+                {
+                    "id": "2",
+                    "requestedQty": 2
+                }
+            ]
+        }
+    },
+    "response": {
+        "success": true,
+        "message": "Spare request submitted successfully",
+        "data": {
+            "id": "1",
+            "type": "TECH_ISSUE",
+            "callId": 3,
+            "status": "Pending",
+            "totalItems": 1,
+            "createdDate": "2/27/2026"
+        }
+    }
+}

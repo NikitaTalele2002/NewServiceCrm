@@ -1,0 +1,41 @@
+{
+    "success": true,
+    "technicianId": 7,
+    "totalCalls": 3,
+    "calls": [
+        {
+            "callId": 101,
+            "customerId": 1,
+            "customerName": "Raj Kumar",
+            "mobileNumber": "9876543210",
+            "email": "raj@example.com",
+            "pincode": "400001",
+            "product": "Samsung TV",
+            "model": "UA55AU7700",
+            "serialNumber": "SN123456789",
+            "callType": "repair",
+            "callSource": "phone",
+            "remark": "Screen display issue",
+            "visitDate": "2026-02-27",
+            "visitTime": "10:00 AM",
+            "status": {
+                "statusId": 6,
+                "statusName": "open"
+            },
+            "substatus": {
+                "subStatusId": 2,
+                "subStatusName": "assigned to the technician"
+            },
+            "serviceCenter": {
+                "ascId": 4,
+                "ascName": "Delhi Service Center",
+                "ascCode": "SC001"
+            },
+            "assignedTechnicianId": 7,
+            "technicianName": "Amit Singh",
+            "technicianMobile": "9988776655",
+            "createdAt": "2026-02-26T10:00:00Z",
+            "updatedAt": "2026-02-26T12:00:00Z"
+        }
+    ]
+}

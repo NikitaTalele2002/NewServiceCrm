@@ -1,0 +1,45 @@
+{
+    "request": {
+        "method": "GET",
+        "url": "/api/technician-spare-returns/22"
+    },
+    "response": {
+        "success": true,
+        "return": {
+            "return_id": 22,
+            "return_number": "TSR-20260227-AX7B9C3D2",
+            "call_id": 101,
+            "technician_id": 7,
+            "service_center_id": 4,
+            "return_status": "submitted",
+            "return_date": null,
+            "received_date": null,
+            "verified_date": null,
+            "remarks": "Returning parts after repair",
+            "received_remarks": null,
+            "verified_remarks": null,
+            "created_at": "2026-02-27T11:30:00Z",
+            "updated_at": "2026-02-27T11:30:00Z",
+            "technician_name": "Amit Singh",
+            "service_center_name": "Delhi Service Center"
+        },
+        "items": [
+            {
+                "return_item_id": 88,
+                "return_id": 22,
+                "spare_id": 2,
+                "item_type": "defective",
+                "requested_qty": 1,
+                "received_qty": 0,
+                "verified_qty": 0,
+                "defect_reason": "Smashed screen",
+                "condition_on_receipt": null,
+                "remarks": null,
+                "spare_part_code": "SP002",
+                "spare_description": "Samsung Display Panel 55\"",
+                "spare_brand": "Samsung"
+            }
+        ],
+        "itemCount": 1
+    }
+}

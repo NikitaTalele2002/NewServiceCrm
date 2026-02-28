@@ -1,4 +1,4 @@
-import { sequelize, SpareRequest, SpareRequestItem, ServiceCenterInventory, Technician, ComplaintRegistration, ServiceCentre, BranchInventory, TechnicianInventory, SparePart, Product, Calls, Status, SubStatus } from '../models/index.js';
+import { sequelize, SpareRequest, SpareRequestItem, ServiceCenterInventory, Technicians, ComplaintRegistration, ServiceCenter, BranchInventory, TechnicianInventory, SparePart, Product, Calls, Status, SubStatus } from '../models/index.js';
 
 // List spare requests with filters
 export async function listSpareRequests(userServiceCenterId, complaintId, type) {
@@ -6,7 +6,7 @@ export async function listSpareRequests(userServiceCenterId, complaintId, type) 
     // Build WHERE clause dynamically
     let whereConditions = [];
     const replacements = [];
-    
+
     if (complaintId) {
       whereConditions.push('sr.ComplaintId = ?');
       replacements.push(complaintId);
@@ -16,15 +16,15 @@ export async function listSpareRequests(userServiceCenterId, complaintId, type) 
     } else {
       whereConditions.push('sr.TechnicianId IS NOT NULL');
     }
-    
+
     // Filter by user's service center if available
     if (userServiceCenterId) {
       whereConditions.push('sr.ServiceCenterId = ?');
       replacements.push(userServiceCenterId);
     }
-    
+
     const whereClause = whereConditions.length > 0 ? 'WHERE ' + whereConditions.join(' AND ') : '';
-    
+
     const query = `
       SELECT sr.Id, sr.RequestNumber, sr.Status, sr.CreatedAt, sr.ComplaintId, sr.TechnicianId, t.TechnicianName
       FROM SpareRequests sr
@@ -33,12 +33,12 @@ export async function listSpareRequests(userServiceCenterId, complaintId, type) 
       ORDER BY sr.CreatedAt DESC
       OFFSET 0 ROWS FETCH NEXT 20 ROWS ONLY
     `;
-    
+
     const requests = await sequelize.query(query, {
       replacements: replacements,
       type: sequelize.QueryTypes.SELECT
     });
-    
+
     // Fetch items for each request in parallel
     const formatted = await Promise.all(requests.map(async (req) => {
       const items = await sequelize.query(
@@ -48,7 +48,7 @@ export async function listSpareRequests(userServiceCenterId, complaintId, type) 
           type: sequelize.QueryTypes.SELECT
         }
       );
-      
+
       return {
         id: req.Id,
         requestId: req.RequestNumber,
@@ -85,7 +85,7 @@ export async function createSpareRequest(complaintId, technicianId, items, notes
     if (technicianId) {
       const technician = await Technician.findByPk(technicianId, { transaction });
       if (technician) {
-        serviceCenterId = technician.ServiceCentreId;
+        serviceCenterId = technician.ServiceCenterId;
       }
     }
 
@@ -228,7 +228,7 @@ export async function getReplacementHistory(startDate, endDate, callId, status, 
       ORDER BY sr.CreatedAt DESC
       OFFSET ? ROWS FETCH NEXT ? ROWS ONLY
     `;
-    
+
     const rows = await sequelize.query(dataQuery, {
       replacements: [...replacements, parseInt(offset), parseInt(limit)],
       type: sequelize.QueryTypes.SELECT
@@ -263,14 +263,14 @@ export async function getReplacementHistory(startDate, endDate, callId, status, 
       };
     });
 
-    return { 
-      data: transformed, 
-      pagination: { 
-        total: count, 
-        page: parseInt(page), 
-        limit: parseInt(limit), 
-        pages: Math.ceil(count / limit) 
-      } 
+    return {
+      data: transformed,
+      pagination: {
+        total: count,
+        page: parseInt(page),
+        limit: parseInt(limit),
+        pages: Math.ceil(count / limit)
+      }
     };
   } catch (error) {
     console.error('Error in replacement-history:', error);
@@ -406,7 +406,7 @@ export async function allocateSpares(requestId, allocations, userServiceCenterId
 
       // Update inventory
       inventory.GoodQty -= qty;
-      
+
       if (inventory.GoodQty === 0 && inventory.DefectiveQty === 0) {
         await inventory.destroy({ transaction });
       } else {
@@ -463,7 +463,7 @@ export async function orderFromBranch(requestId, cartItems) {
       throw new Error('Request not found');
     }
 
-    const serviceCenter = await ServiceCentre.findByPk(request.ServiceCenterId, { transaction });
+    const serviceCenter = await ServiceCenter.findByPk(request.ServiceCenterId, { transaction });
     if (!serviceCenter) {
       throw new Error('Service center not found');
     }
@@ -639,8 +639,8 @@ export async function createReplacementRequest(callId, productGroup, product, mo
     // Determine service center ID
     let serviceCenterId = userCenterId || null;
     if (!serviceCenterId && userBranchId) {
-      const { ServiceCentre } = await import('../models/index.js');
-      const serviceCenter = await ServiceCentre.findOne({
+      const { ServiceCenter } = await import('../models/index.js');
+      const serviceCenter = await ServiceCenter.findOne({
         where: { BranchId: userBranchId },
         transaction
       });
@@ -783,22 +783,22 @@ export async function bulkReturnParts(returns) {
 
       const technician = await Technician.findOne({
         where: { Id: technicianId },
-        include: [{ model: ServiceCentre }],
+        include: [{ model: ServiceCenter }],
         transaction
       });
 
-      if (technician && technician.ServiceCentre) {
-        const scId = technician.ServiceCentre.Id;
+      if (technician && technician.ServiceCenter) {
+        const scId = technician.ServiceCenter.Id;
 
         let scInventory = await ServiceCenterInventory.findOne({
-          where: { Sku: sku, ServiceCentreId: scId },
+          where: { Sku: sku, ServiceCenterId: scId },
           transaction
         });
 
         if (scInventory) {
           scInventory.GoodQty += goodQty;
           scInventory.DefectiveQty += defectiveQty;
-          
+
           if (scInventory.GoodQty === 0 && scInventory.DefectiveQty === 0) {
             await scInventory.destroy({ transaction });
           } else {
@@ -811,7 +811,7 @@ export async function bulkReturnParts(returns) {
               SpareName: techInventory.SpareName,
               GoodQty: goodQty,
               DefectiveQty: defectiveQty,
-              ServiceCentreId: scId
+              ServiceCenterId: scId
             }, { transaction });
           }
         }
@@ -830,11 +830,11 @@ export async function bulkReturnParts(returns) {
 export async function getAllTechnicianInventories(technician, product, model, sparePart) {
   try {
     let whereClause = {};
-    
+
     if (technician) {
       whereClause.TechnicianId = technician;
     }
-    
+
     const inventories = await TechnicianInventory.findAll({
       where: whereClause,
       include: [
@@ -846,7 +846,7 @@ export async function getAllTechnicianInventories(technician, product, model, sp
       ],
       attributes: ['Id', 'Sku', 'SpareName', 'GoodQty', 'DefectiveQty', 'TechnicianId']
     });
-    
+
     const formatted = inventories.map(inv => ({
       id: inv.Id,
       technicianId: inv.TechnicianId,
@@ -857,7 +857,7 @@ export async function getAllTechnicianInventories(technician, product, model, sp
       defectiveQty: inv.DefectiveQty,
       totalQty: inv.GoodQty + inv.DefectiveQty
     }));
-    
+
     return formatted;
   } catch (error) {
     console.error('Error fetching technician inventories:', error);

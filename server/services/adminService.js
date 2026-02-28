@@ -108,7 +108,7 @@ export async function uploadMasterData(file, type, mode) {
     }
 
     // Clean up file
-    try { fs.unlinkSync(file.path); } catch (e) {}
+    try { fs.unlinkSync(file.path); } catch (e) { }
 
     return {
       processed: rows.length,
@@ -119,7 +119,7 @@ export async function uploadMasterData(file, type, mode) {
       preview
     };
   } catch (error) {
-    try { fs.unlinkSync(file.path); } catch (e) {}
+    try { fs.unlinkSync(file.path); } catch (e) { }
     console.error("Upload error:", error);
     throw error;
   }
@@ -868,7 +868,7 @@ export async function updateMasterData(type, id, payload) {
   try {
     const model = resolveModelFromTypeParam(type);
     if (!model) throw new Error('Unknown type');
-    
+
     const pk = (model.primaryKeyAttributes && model.primaryKeyAttributes[0]) || 'Id';
     const where = {};
     where[pk] = isNaN(Number(id)) ? id : Number(id);
@@ -924,7 +924,7 @@ export async function searchMasterData(type, q) {
   try {
     const requested = (type || '').toString().trim().toLowerCase();
     const mappedType = typeMap[requested] || requested;
-    
+
     let whereClause = {};
     if (q && q.trim()) {
       whereClause.VALUE = { [Op.like]: `%${q.trim()}%` };

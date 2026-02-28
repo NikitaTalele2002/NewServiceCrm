@@ -1,20 +1,26 @@
 import { Sequelize } from "sequelize";
 import sql from "mssql";
+import dotenv from 'dotenv';
+dotenv.config();
 
-const sequelize = new Sequelize("NewCRM", "crm_user", "StrongPassword123!", {
-  host: "localhost",
-  dialect: "mssql",
-  // When connecting to a named instance like SQLEXPRESS, specify instanceName
-  dialectOptions: {
-    options: {
-      instanceName: "SQLEXPRESS",
-      encrypt: false,
-      trustServerCertificate: true,
+const sequelize = new Sequelize(
+  process.env.DB_NAME || "NewCRM",
+  process.env.DB_USER || "crm_user",
+  process.env.DB_PASSWORD || "StrongPassword123!",
+  {
+    host: process.env.DB_HOST || "localhost",
+    dialect: "mssql",
+    dialectOptions: {
+      options: {
+        instanceName: process.env.DB_INSTANCE,
+        encrypt: false,
+        trustServerCertificate: true,
+      },
     },
-  },
-  logging: false,
-  pool: { max: 5, min: 0, idle: 10000 },
-});
+    logging: false,
+    pool: { max: 5, min: 0, idle: 10000 },
+  }
+);
 
 // Load models first to register them in sequelize.models
 let modelsLoaded = false;
@@ -32,11 +38,11 @@ const loadModels = async () => {
 const connectDB = async () => {
   // Load models before connecting to DB
   await loadModels();
-  
+
   try {
     await sequelize.authenticate();
     console.log("Database Connected Successfully");
-    
+
     // Sync database with proper table dependency ordering
     await syncTablesInOrder();
     console.log("Database synced successfully");
@@ -53,7 +59,7 @@ const syncTablesInOrder = async () => {
   try {
     // Get all models
     const models = sequelize.models;
-    
+
     // Define sync order based on actual dependencies
     const syncOrder = [
       // Phase 1: Completely independent tables (no foreign keys at all)
@@ -61,7 +67,7 @@ const syncTablesInOrder = async () => {
       'Users', 'Technicians', 'ServiceCenter', 'ActionLog', 'EntityChangeRequests',
       'Approvals', 'Ledger', 'Reimbursement', 'LogisticsDocuments', 'SAPDocuments',
       'Status', 'StockMovement',
-      
+
       // Phase 2: Tables depending on Phase 1
       'State', // independent but needs to be early
       'City', // depends on State
@@ -69,22 +75,22 @@ const syncTablesInOrder = async () => {
       'ProductMaster', // depends on ProductGroup
       'ReportingAuthority', // depends on Users
       'RSM', // depends on Users
-      
+
       // Phase 3: More complex dependencies
       'ProductModel', // depends on ProductMaster
       'RSMStateMapping', // depends on RSM, State
       'ServiceCenterPincodes', // depends on ServiceCenter, Pincode
       'SparePart', // depends on ProductModel
-      
+
       // Phase 4: Customer (depends on City, State)
       'Customer',
-      
+
       // Phase 5: CustomersProducts (depends on Customer, ProductMaster, ProductModel)
       'CustomersProducts',
-      
+
       // Phase 6: Calls (depends on Customer, CustomersProducts, Users, Status) + self-reference
       'Calls',
-      
+
       // Phase 7: Tables dependent on Calls
       'HappyCodes', // depends on Calls
       'TATTracking', // depends on Calls
@@ -98,24 +104,24 @@ const syncTablesInOrder = async () => {
       'ServiceInvoiceItem', // depends on ServiceInvoice
       'Replacements', // depends on Calls
       'ServiceCenterFinancial', // depends on ServiceCenter
-      
+
       // Phase 8: Spare/Inventory tables
       'SpareInventory', // depends on SparePart
       'SpareRequest', // depends on Calls, Technicians, Status
       'SpareRequestItem', // depends on SpareRequest, SparePart
-      
+
       // Phase 9: Defects and Models
       'ModelDefects', // depends on ProductModel
       'DefectSpares', // depends on DefectMaster, SparePart
-      
+
       // Phase 10: Stock/Cartons/Goods
       'Cartons', // depends on StockMovement
       'GoodsMovementItems', // depends on StockMovement, Cartons, SparePart
       'LogisticsDocumentItems', // depends on LogisticsDocuments, SparePart
-      
+
       // Phase 11: SAP
       'SAPDocumentItems', // depends on SAPDocuments
-      
+
       // Phase 12: Catchall for any remaining
       'AccessControl',
     ];
@@ -143,7 +149,7 @@ const syncTablesInOrder = async () => {
     for (const modelName of syncOrder) {
       if (models[modelName]) {
         const model = models[modelName];
-        
+
         if (tableExists(modelName, model)) {
           // Table already exists
           console.log(`✅ Synced table: ${modelName}`);
@@ -183,11 +189,11 @@ const syncTablesInOrder = async () => {
 // Also export a MSSQL connection pool (some routes use `mssql` + poolPromise)
 const poolConfig = {
   user: process.env.DB_USER || 'crm_user',
-  password: process.env.DB_PASS || 'StrongPassword123!',
-  server: process.env.DB_SERVER || 'localhost',
+  password: process.env.DB_PASSWORD || 'StrongPassword123!',
+  server: process.env.DB_HOST || 'localhost',
   database: process.env.DB_NAME || 'NewCRM',
   options: {
-    instanceName: process.env.DB_INSTANCE || 'SQLEXPRESS',
+    instanceName: process.env.DB_INSTANCE,
     encrypt: false,
     trustServerCertificate: true,
     requestTimeout: 30000,

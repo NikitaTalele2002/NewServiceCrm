@@ -1,0 +1,19 @@
+{
+    "request": {
+        "method": "POST",
+        "url": "/api/technician-tracking/tat-tracking",
+        "body": {
+            "call_id": 101
+        }
+    },
+    "response": {
+        "ok": true,
+        "message": "TAT tracking started",
+        "id": 89,
+        "data": {
+            "call_id": 101,
+            "tat_status": "in_progress",
+            "tat_start_time": "2026-02-27T13:00:00Z"
+        }
+    }
+}

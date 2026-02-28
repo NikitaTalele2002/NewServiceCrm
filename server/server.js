@@ -29,6 +29,7 @@ import scBranchRequestsRoute from "./routes/scBranchRequests.js";
 import technicianTrackingRoute from "./routes/technician-tracking.js";
 import attachmentRoutes from "./routes/attachmentRoutes.js";
 import servicecenterRoute from "./routes/servicecenter.js";
+import technicianMobileApi from "./API_JSON_DATA/api/technisian_mobile_api/index.js";
 
 const app = express();
 
@@ -108,6 +109,9 @@ app.use("/api/logistics", logisticsRoute);
 
 // Attachments
 app.use("/api/attachments", attachmentRoutes);
+
+// Technician Mobile API
+app.use("/api/technician-mobile", technicianMobileApi);
 
 // SERVER
 const PORT = process.env.PORT || 5000;

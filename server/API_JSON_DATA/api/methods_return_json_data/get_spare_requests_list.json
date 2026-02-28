@@ -1,0 +1,38 @@
+{
+    "request": {
+        "method": "GET",
+        "url": "/api/technician-spare-requests"
+    },
+    "response": {
+        "success": true,
+        "count": 1,
+        "data": [
+            {
+                "id": 15,
+                "requestId": "REQ-15",
+                "spare_request_type": "TECH_ISSUE",
+                "request_reason": "Broken screen on arrival",
+                "technicianName": "Amit Singh",
+                "call_id": 101,
+                "status": "pending",
+                "createdAt": "2026-02-27T10:00:00Z",
+                "items": [
+                    {
+                        "spare_request_item_id": 45,
+                        "spare_id": 2,
+                        "spare_part_code": "SP002",
+                        "spare_part_name": "Samsung Display Panel 55\"",
+                        "quantity_requested": 1,
+                        "approved_qty": 0,
+                        "qty_good": 5,
+                        "qty_defective": 1,
+                        "qty_in_transit": 0,
+                        "total_qty": 6,
+                        "available_qty": 5,
+                        "availability_status": "fully_available"
+                    }
+                ]
+            }
+        ]
+    }
+}
